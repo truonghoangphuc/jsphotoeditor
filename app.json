@@ -1,18 +1,12 @@
 {
-  "name": "jsphotoeditor",
-  "description": "a small web lightroom clone",
-  "scripts": {
-  },
-  "env": {
-  },
-  "formation": {
-  },
-  "addons": [
-
-  ],
-  "buildpacks": [
-    {
-      "url": "heroku/nodejs"
-    }
-  ]
+  "name": "React Tutorial Server",
+  "description": "Web Lightroom clone",
+  "keywords": [ "react", "reactjs", "tutorial" ],
+  "repository": "https://github.com/truonghoangphuc/jsphotoeditor",
+  "website": "http://beawesomenet.com/",
+  "success_url": "/",
+  "env" : {
+    "BUILDPACK_URL": "https://github.com/heroku/heroku-buildpack-nodejs.git"
+  }
 }
+
