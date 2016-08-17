@@ -27,7 +27,11 @@ var validation = {
         var t=/^[a-zA-Z0-9]+$/;
         return!!t.test(e)
     }
-};   
+};  
+
+String.prototype.capitalizeFirstLetter = function() {
+    return this.charAt(0).toUpperCase() + this.slice(1);
+}
 String.prototype.replaceAll=function(e,t){var r=this;return r.replace(new RegExp(e.replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&"),"g"),t)},
 Array.prototype.getRandom=function(e,t){var r=t?this:this.slice(0);return r.sort(function(){return.5-Math.random()}),r.splice(0,e)},
 Number.prototype.format=function(e,t,r,n){var i="\\d(?=(\\d{"+(t||3)+"})+"+(e>0?"\\D":"$")+")",o=this.toFixed(Math.max(0,~~e));return(n?o.replace(".",n):o).replace(new RegExp(i,"g"),"$&"+(r||","))},
@@ -108,7 +112,6 @@ var $viewport=0, windowWidth,windowHeight;
 
         m.css('height',$(window).height()-h.outerHeight()-f.outerHeight());
         $('#stage').css('height',m.height()-$('.toolbar-wrapper').outerHeight());
-        $(".preloader").delay(100).fadeOut("slow");
     });
     var resizeMainWindow = function(e){
         var windowWidthNew = $(window).width();

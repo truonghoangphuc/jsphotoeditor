@@ -3,6 +3,7 @@ const AppToolButtons = [
   {title:"New File",icon:"fa-file",method:"newFile",group:"btn-group-file"},
   {title:"Save File",icon:"fa-save",method:"saveFile",group:"btn-group-file"},
   {title:"Open File",icon:"fa-folder-open",method:"openFile",group:"btn-group-file"},
+  {title:"Export File",icon:"fa-cloud-upload",method:"exportImage",group:"btn-group-file"},
   {title:"Undo",icon:"fa-undo",method:"appUnDo",group:"btn-group-command"},
   {title:"Redo",icon:"fa-repeat",method:"appReDo",group:"btn-group-command"},
   {title:"Erase",icon:"fa-eraser",method:"appErase",group:"btn-group-command"},
@@ -10,18 +11,38 @@ const AppToolButtons = [
   {title:"Zoom In",icon:"fa-search-plus",method:"appZoomIn",group:"btn-group-command"},
   {title:"Zoom Out",icon:"fa-search-minus",method:"appZoomOut",group:"btn-group-command"},
   {title:"Insert Photo",icon:"fa-file-photo-o",method:"openModalPhoto",group:"btn-group-photo"},
-  {title:"Grayscale",icon:"fa-adjust",method:"appGrayscale",group:"btn-group-photo"},
-  {title:"Blend",icon:"fa-filter",method:"appBlend",group:"btn-group-photo"}
+  {title:"Blend",icon:"fa-filter",method:"appOpenFilter",group:"btn-group-photo"}
+];
+const AppFilterPreset =[
+  {title:"Juno",img:""},
+  {title:"Juno",img:""}
+];
+//top-left, top, top-right, right, bottom-right, bottom, bottom-left or left
+const AppFilterObject = [
+  {title:"Grayscale",method:"Grayscale"},
+  {title:"Brighten",method:"Brighten",option:[{type:"range",title:"Brightness",properties:{min:-1,max:1,step:0.1,value:0,config:"brightness"}}]},
+  {title:"Invert",method:"Invert"},
+  {title:"Blur",method:"Blur",option:[{type:"range",title:"Radius",properties:{min:0,max:100,step:1,value:10,config:"blurRadius"}}]},
+  {title:"Mask",method:"Mask",option:[{type:"range",title:"Threshold",properties:{min:0,max:500,step:1,config:"threshold"}}]},
+  {title:"RGB",method:"RGB",option:[{type:"range",title:"Red",properties:{min:0,max:255,step:1,value:125,config:"red"}},{type:"range",title:"Green",properties:{min:0,max:255,step:1,value:125,config:"green"}},{type:"range",title:"Blue",properties:{min:0,max:255,step:1,value:125,config:"blue"}}]},
+  {title:"HSV",method:"HSV",option:[{type:"range",title:"Hue",properties:{min:0,max:359,step:1,value:0,config:"hue"}},{type:"range",title:"Saturation",properties:{min:-1,max:1,step:0.1,value:0,config:"saturation"}},{type:"range",title:"Value",properties:{min:-1,max:1,step:0.1,value:0,config:"value"}}]},
+  {title:"HSL",method:"HSL",option:[{type:"range",title:"Hue",properties:{min:0,max:359,step:1,value:0,config:"hue"}},{type:"range",title:"Saturation",properties:{min:-1,max:1,step:0.1,value:0,config:"saturation"}},{type:"range",title:"Luminance",properties:{min:-1,max:1,step:0.1,value:0,config:"luminance"}}]},
+  {title:"Emboss",method:"Emboss",option:[
+    {type:"range",title:"Strength",properties:{min:0,max:1,step:0.1,value:0.5,config:"embossStrength"}},
+    {type:"range",title:"WhiteLevel",properties:{min:-1,max:1,step:0.1,value:0.5,config:"embossWhiteLevel"}},
+    {type:"select",title:"Direction",properties:{value:'top-left',config:"embossDirection"},options:['top-left','top','top-right','right','bottom-right','bottom','bottom-left','left']},
+    {type:"range",title:"Blend",properties:{min:0,max:10,step:1,value:0,config:"embossBlend"}}]},
+  {title:"Enhance",option:[{type:"range",title:"Enhance",properties:{min:0,max:255,step:1,value:0,config:"enhance"}}]}
 ];
 var jcrop_api;
 window.originalIMG = [];
 
 const DrawAppBox = React.createClass({
   getInitialState: function() {
-    return {};
+    return {message:null};
   },
   componentDidMount: function() {
-    console.log('AppBox componentDidMount');
+    this.refs.panelmanual.setStage(this.refs.appstage);
   },
   componentWillUnmount: function(){
     console.log('AppBox componentWillUnmount');
@@ -29,16 +50,41 @@ const DrawAppBox = React.createClass({
   handleAppSubmit: function(comment) {
     
   },
+  showMessage: function(html,callback) {
+    this.setState({message:html});
+    this.refs.modalmess.getInstance().on('shown.bs.modal',callback);
+    this.refs.modalmess.open();
+  },
+  confirmMessModal: function(){
+    this.refs.modalmess.getInstance().off('shown.bs.modal',function(){});
+    this.refs.modalmess.close();
+  },
+  showLoading: function(callback) {
+    this.refs.apploading.showLoading();
+    if(typeof callback==='function')callback();
+  },
+  hideLoading: function(callback) {
+    this.refs.apploading.hideLoading();
+    if(typeof callback==='function')callback();
+  },
   loadFile: function(){
     $('#fileDialog').trigger('click');
   },
   handleOpenFile: function(e){
+    var $this = this;
     var files = e.target.files;
-    this.refs.appstage.loadFile(files);
+    $this.showLoading();
+    $this.refs.appstage.loadFile(files,function(){
+      $this.hideLoading();
+    });
   },
   newFile: function(opt){
     this.refs.appstage.createNewFile(opt);
     this.refs.modalnew.close();
+  },
+  openEffectPanel: function(callback){
+    this.refs.panelmanual.open();
+    if(typeof callback==='function') callback();
   },
   openFileModal: function() {
     this.refs.modal.open();
@@ -58,7 +104,6 @@ const DrawAppBox = React.createClass({
     this.refs.modal.close();
   },
   handleFileModalDidClose: function() {
-    //callback after close
   },
   handleFileModalCancel: function() {
     this.refs.modal.close();
@@ -71,14 +116,11 @@ const DrawAppBox = React.createClass({
     for(var i=0,len=cans.length;i<len;i++){
       this.props.fileImported.push(cans[i]);
       var drawOpt = {};
-      drawOpt.draggable = false;
+      drawOpt.draggable = true;
       drawOpt.zindex = i+1;
       this.refs.appstage.appDrawImage(cans[i],drawOpt);
     }
     this.refs.modalphoto.close();
-  },
-  handlePhotoModalDidClose: function() {
-    //callback after close
   },
   handlePhotoModalCancel: function() {
     this.refs.modalphoto.close();
@@ -88,9 +130,6 @@ const DrawAppBox = React.createClass({
   },
   handleNewModalCancel: function(){
     this.refs.modalnew.close();
-  },
-  handleNewModalDidClose: function(){
-    //nothing
   },
   confirmNewModal: function(){
     var opt = {};
@@ -250,25 +289,30 @@ const DrawAppBox = React.createClass({
   handleZoomOut: function(e){
     this.refs.appstage.appZoomOut(e);
   },
-  handleGrayScale: function(e){
-    this.refs.appstage.appGrayScale(e);
+  handleExportPhoto: function(){
+    var $this = this;
+    $this.showLoading();
+    this.refs.appstage.exportFile(function(){
+      $this.hideLoading();
+    });
   },
   render: function() {
+    var $this = this;
     var modal = null;
     modal = (
-      <AppModal ref="modal" confirm="OK" cancel="Cancel" onCancel={this.handleFileModalCancel} onConfirm={this.confirmFileModal} onHidden={this.handleFileModalDidClose} id="fileModal" title="ReactPhotoEdito - Add Photos">
+      <AppModal ref="modal" confirm="OK" cancel="Cancel" onCancel={this.handleFileModalCancel} onConfirm={this.confirmFileModal} id="fileModal" title="ReactPhotoEdito - Add Photos">
         <AppUpload fileSelects={this.props.fileSelects}></AppUpload>
       </AppModal>
     );
     var modalEditPhoto = null;
     modalEditPhoto = (
-      <AppModal ref="modalphoto" confirm="OK" cancel="Cancel" onCancel={this.handlePhotoModalCancel} onConfirm={this.closePhotoModal} onHidden={this.handlePhotoModalDidClose} id="photoModal" title="ReactPhotoEdito - Edit Photos">
+      <AppModal ref="modalphoto" confirm="OK" cancel="Cancel" onCancel={this.handlePhotoModalCancel} onConfirm={this.closePhotoModal} id="photoModal" title="ReactPhotoEdito - Edit Photos">
         <AppEditUpload ref="editupload" openJCrop={this.openCropFileModal}></AppEditUpload>
       </AppModal>
     );
     var modalNew = null;
     modalNew = (
-      <AppModal ref="modalnew" size="modal-small" confirm="OK" cancel="Cancel" onCancel={this.handleNewModalCancel} onConfirm={this.confirmNewModal} onHidden={this.handleNewModalDidClose} id="newModal" title="ReactPhotoEdito - Create New File">
+      <AppModal ref="modalnew" size="modal-small" confirm="OK" cancel="Cancel" onCancel={this.handleNewModalCancel} onConfirm={this.confirmNewModal} id="newModal" title="ReactPhotoEdito - Create New File">
         <div className="form-group row">
           <label className="col-xs-12 control-label">File size (pixel)</label>
           <div className="col-xs-5">
@@ -282,10 +326,10 @@ const DrawAppBox = React.createClass({
         <div className="form-group row">
           <label className="col-xs-12 control-label">Background Color</label>
           <div className="col-xs-12">
-            <select className="form-control selectpicker">
+            <select className="form-control selectpicker" defaultValue="#none">
+              <option value="#none">Transparent</option>
               <option value="#fff">White</option>
               <option value="#000">Black</option>
-              <option value="#none">Transparent</option>
             </select>
           </div>
         </div>
@@ -304,15 +348,28 @@ const DrawAppBox = React.createClass({
         </div>
       </AppModal>
     );
+    var modalMessage = null;
+    modalMessage = (
+      <AppModal ref="modalmess" className="pop-message" confirm="OK" onConfirm={this.confirmMessModal} id="fileModalMess">
+        {this.state.message}
+      </AppModal>
+    );
+    var panelManualFilter = null;
+    panelManualFilter = (
+      <AppBottomPanel ref="panelmanual" items={AppFilterObject} className="manual-filters" id="panelManualEffect"></AppBottomPanel>
+    );
     return (
       <div className="main-app">
-        <AppToolbar buttons={AppToolButtons} openFileModal={this.openFileModal} loadFile={this.loadFile} newFile={this.openNewFileModal} openJCrop={this.openCropFileModal} zoomIn={this.handleZoomIn} zoomOut={this.handleZoomOut} grayScale={this.handleGrayScale} />
-        <AppStage ref="appstage" mobileMode={this.props.mobileMode}/>
+        <AppToolbar buttons={AppToolButtons} exportFile={this.handleExportPhoto} openFileModal={this.openFileModal} loadFile={this.loadFile} newFile={this.openNewFileModal} openJCrop={this.openCropFileModal} zoomIn={this.handleZoomIn} zoomOut={this.handleZoomOut} openEffectPanel={this.openEffectPanel} />
+        <AppStage ref="appstage" mobileMode={this.props.mobileMode} url="/api/photo" onMessage={this.showMessage}/>
         <BootstrapInput type="file" className="file-dialog" id="fileDialog" onChange={this.handleOpenFile}></BootstrapInput>
         {modal}
         {modalEditPhoto}
         {modalNew}
         {modalJcrop}
+        {modalMessage}
+        {panelManualFilter}
+        <BootstrapLoading ref="apploading"></BootstrapLoading>
       </div>
     );
   }
@@ -348,9 +405,14 @@ const AppToolbarButton = React.createClass({
       this.props.zoomOut(e);
     }
   },
-  grayScale: function(e){
-    if(typeof this.props.grayScale==='function'){
-      this.props.grayScale(e);
+  openFilter: function(e){
+    if(typeof this.props.openFilter==='function'){
+      this.props.openFilter(e);
+    }
+  },
+  exportFile: function(e){
+    if(typeof this.props.exportFile==='function'){
+      this.props.exportFile(e);
     }
   },
   handleClick: function(e){
@@ -371,8 +433,11 @@ const AppToolbarButton = React.createClass({
       case 'appZoomOut':
         this.zoomOut(e);
         break;
-      case 'appGrayscale':
-        this.grayScale(e);
+      case 'appOpenFilter':
+        this.openFilter(e);
+        break;
+      case 'exportImage':
+        this.exportFile(e);
         break;
       default:
         break;
@@ -390,7 +455,7 @@ const AppToolbarButton = React.createClass({
       }
     }
     return (
-      <a className="btn btn-default" {...opts} href="javascript:void(0);" onClick={this.handleClick}>
+      <a className="btn btn-default" {...opts} title={this.props.button.title} href="javascript:void(0);" onClick={this.handleClick}>
         <span className={classname}>
         </span>
       </a>
@@ -402,7 +467,7 @@ const AppToolbarGroup = React.createClass({
     var btns = [],
         currentIndex = 0;
     this.props.buttons.forEach(function(button) {
-      btns.push(<AppToolbarButton button={button} key={this.props.groupid + '_' + currentIndex} grayScale={this.props.grayScale} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
+      btns.push(<AppToolbarButton button={button} key={this.props.groupid + '_' + currentIndex} exportFile={this.props.exportFile} openFilter={this.props.openFilter} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
         currentIndex++;
     }.bind(this));
     var classgroup = "btn-group " + this.props.buttons[0].group;
@@ -423,13 +488,13 @@ const AppToolbar = React.createClass({
       if(button.group==currentGroup){
         grouparr.push(button);
       }else{
-        groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} grayScale={this.props.grayScale} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
+        groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} exportFile={this.props.exportFile} openFilter={this.props.openEffectPanel} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
         grouparr = [];
         currentIndex++;
         grouparr.push(button);
       }
       currentGroup = button.group;
-      if(index==this.props.buttons.length-1)groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} grayScale={this.props.grayScale} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
+      if(index==this.props.buttons.length-1)groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} exportFile={this.props.exportFile} openFilter={this.props.openEffectPanel} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
     }.bind(this));
     return (
       <div className="toolbar-wrapper">
@@ -437,6 +502,50 @@ const AppToolbar = React.createClass({
           {groups}
         </div>
       </div>
+    );
+  }
+});
+const BoostrapImage = React.createClass({
+  getInitialState: function(){
+    return {
+      isEmpty:false
+    }
+  },
+  handleLoad:function(e){
+    if(typeof this.props.onLoad==='function'){
+      this.props.onLoad(e);
+    }
+  },
+  render: function() {
+    return (
+      <img {...this.props} className={(this.props.className || '')} onLoad={this.handleLoad}/>
+    );
+  }
+});
+const BootstrapSelect = React.createClass({
+  getInitialState: function(){
+    return {
+      isError:false
+    }
+  },
+  addError: function(){
+    this.setState({isError:true});
+  },
+  handleChange:function(e){
+    if(typeof this.props.onChange==='function'){
+      this.props.onChange(e);
+    }
+  },
+  render: function() {
+    var classes = this.state.isError ? " has-error" : "";
+    var opt = [];
+    this.props["data-options"].forEach(function(i,x){
+      opt.push(<option value={i} key={i}>{i}</option>);
+    });
+    return (
+      <select {...this.props} value={this.props.value} className={(this.props.className || '') + classes} onChange={this.handleChange}>
+        {opt}
+      </select>
     );
   }
 });
@@ -463,7 +572,7 @@ const BootstrapInput = React.createClass({
     }
   },
   render: function() {
-    var classes = this.state.isError ? " has-error" : " has-error";
+    var classes = this.state.isError ? " has-error" : "";
     return (
       <input {...this.props} type={this.props.type} value={this.props.value} className={(this.props.className || '') + classes} onChange={this.handleChange}/>
     );
@@ -475,6 +584,137 @@ const BootstrapButton = React.createClass({
       <button {...this.props}
         role="button"
         className={(this.props.className || '') + ' btn'}>{this.props.children}</button>
+    );
+  }
+});
+const BootstrapLoading = React.createClass({
+  getInitialState: function(){
+    return {
+      isLoading:false
+    }
+  },
+  showLoading:function(){
+    this.setState({isLoading:true});
+  },
+  hideLoading:function(){
+    this.setState({isLoading:false});
+  },
+  render: function() {
+    var classes = (this.state.isLoading)?'show':'';
+    return (
+      <div ref="root" {...this.props} className={(this.props.className || '') + classes + ' loading-overlay'} id={this.props.id}>
+        <div className="loading">{this.props.children}</div>
+      </div>
+    );
+  }
+});
+const AppBottomPanel = React.createClass({
+  getInitialState: function(){
+    return {
+      isOpening:false,
+      appstage:null
+    }
+  },
+  componentDidMount: function() {
+    var $this = this;
+    var opt = ReactDOM.findDOMNode(this).querySelectorAll('.option-item');
+    opt.forEach(function(item,index){ 
+      var p = item.getAttribute('data-props');
+      if(p!==null){
+        p=p.split(',');
+        p.forEach(function(i,x){
+          if(i!==null){
+            var a = i.split('|')[0],b=i.split('|')[1];
+            item.setAttribute(a,b);
+          }
+        });
+      }
+      if(item.value==null||item.value==undefined)item.value=0;
+    });
+  },
+  componentWillUnmount: function() {
+    
+  },
+  setStage:function(stage){
+    this.setState({appstage:stage});
+  },
+  close: function() {
+    this.setState({isOpening:false});
+  },
+  open: function() {
+    this.setState({isOpening:true});
+  },
+  getInstance: function(){
+    return $(this.refs.root);
+  },
+  handleChange: function(e){
+    if(this.state.appstage==null)return;
+    var method = e.target.value;
+    this.state.appstage.appFilter(method);
+    var optRef = e.target.options[e.target.selectedIndex].getAttribute('data-ref');
+    var s = document.querySelector('.effect-option.show');
+    if(s){
+      s.classList.remove('show');
+    }
+    var a = document.querySelector('.effect-option[data-ref="'+optRef+'"]');
+    if(a){
+      a.classList.add('show');
+    }
+  },
+  handleOption: function(e){
+    var opt = e.target.getAttribute('config');
+    var method = opt.toString();
+    if(this.state.appstage==null)return;
+    this.state.appstage.appFilterOption(method,e.target.value);
+  },
+  render: function() {
+    var $this = this;
+    var classes = (this.state.isOpening)?'show ':'';
+    classes+=this.props.className;
+    var items = [],
+        options = [];
+    items.push(<option key="0" value="">None</option>);
+    this.props.items.forEach(function(item,index) {
+      items.push(<option key={index+1} value={item.method} data-ref={'option'+index}>{item.title}</option>);
+      if(item.option!==undefined){
+        var option = [];
+        item.option.forEach(function(opt,idx){
+          var pts = opt.properties, props =[];
+          Object.keys(pts).forEach(function(key,index) {
+            props.push(key+"|"+pts[key]);
+          });
+          if(opt.type=='input'||opt.type=='range'||opt.type=='checkbox'||opt.type=='radio'){
+            option.push(
+              <div className="form-group" key={"opt"+index+1+"_"+idx}>
+                <label className="caption">{opt.title}</label>
+                <BootstrapInput className="option-item" type={opt.type} onChange={$this.handleOption} data-props={props}></BootstrapInput>
+              </div>
+            );
+          }else if(opt.type=="select"){
+            option.push(
+              <div className="form-group" key={"opt"+index+1+"_"+idx}>
+                <label className="caption">{opt.title}</label>
+                <BootstrapSelect className="option-item form-control" onChange={$this.handleOption} data-props={props} data-options={opt.options}></BootstrapSelect>
+              </div>
+            );
+          }
+        });
+        options.push(
+          <div className="effect-option" data-ref={'option'+index} key={"opt"+index+1}>{option}</div>
+        );
+      }
+    });
+
+    return (
+      <div ref="root" className={classes + ' panel panel-success bottom-panel'} id={this.props.id}>
+        <div className="panel-heading">
+          <h3 className="panel-title">Effects</h3>
+        </div>
+        <div className="form-group">
+          <select className="form-control" id={'select_'+this.props.id} onChange={this.handleChange}>{items}</select>
+          {options}
+        </div>
+      </div>
     );
   }
 });
@@ -517,7 +757,7 @@ const AppModal = React.createClass({
       option = this.props.size;
     }
     return (
-      <div className="modal fade" ref="root" id={this.props.id}>
+      <div className={(this.props.className || '') + ' modal fade'} ref="root" id={this.props.id}>
         <div className={option +' modal-dialog'}>
           <div className="modal-content">
             <div className="modal-header">
@@ -736,11 +976,14 @@ const AppStage = React.createClass({
     return ReactDOM.findDOMNode(this);
   },
   getInitialState: function() {
-    return {zoom:100,data:null};
+    return {zoom:100,data:null,result:null};
   },
   componentDidMount: function(){
     var $this = ReactDOM.findDOMNode(this);
     $this.style.height = document.querySelector('#main').offsetHeight- document.querySelector('.toolbar-wrapper').offsetHeight+'px';
+  },
+  getCurrentLayer: function(){
+    return window.originalIMG[0];
   },
   appZoomIn: function(e){
     var z = this.state.zoom;
@@ -753,12 +996,14 @@ const AppStage = React.createClass({
       if(ow<=w&&oh<=h){
         this.setState({zoom:(z+1)});
       }else{
-        var r = w/h,
+        var r = ow/oh,
             rz = 100;
         if(r<=1){
-          rz = w/ow*100;
+          var nh = oh*w/ow;
+          rz = nh/oh*100;
         }else{
-          rz = h/oh*100;
+          var nw = ow*h/oh;
+          rz = nw/ow*100;
         }
         this.setState({zoom:rz});
       }
@@ -777,12 +1022,14 @@ const AppStage = React.createClass({
       if(ow<=w&&oh<=h){
         this.setState({zoom:(z-1)});
       }else{
-        var r = w/h,
+        var r = ow/oh,
             rz = 100;
         if(r<=1){
-          rz = w/ow*100;
+          var nh = oh*w/ow;
+          rz = nh/oh*100;
         }else{
-          rz = h/oh*100;
+          var nw = ow*h/oh;
+          rz = nw/ow*100;
         }
         this.setState({zoom:rz});
       }
@@ -790,9 +1037,9 @@ const AppStage = React.createClass({
       this.setState({zoom:(z-1)});
     }
   },
-  appGrayScale: function(e){
+  appFilter: function(filter,callback){
     if(window.originalIMG.length){
-      var layer = window.originalIMG[0];
+      var layer = this.getCurrentLayer();
       var config = {
         x:0,
         y:0,
@@ -800,11 +1047,19 @@ const AppStage = React.createClass({
         height: layer.height()
       }
       layer.cache(config);
-      layer.filters([Kinetic.Filters.Grayscale]);
+      layer.filters([Kinetic.Filters[filter]]);
+      KineticStage.draw();
+      if(typeof callback === 'function') callback();
+    }
+  },
+  appFilterOption: function(setting,value){
+    if(window.originalIMG.length){
+      var layer = this.getCurrentLayer();
+      layer[setting](value);
       KineticStage.draw();
     }
   },
-  appDrawImage :function(src,opt){
+  appDrawImage: function(src,opt){
     var cs;
     if(typeof src=='string'){
       cs=src;
@@ -825,7 +1080,7 @@ const AppStage = React.createClass({
     }
     img.src = cs;
   },
-  loadFile: function(files){
+  loadFile: function(files,callback){
     var file = files[0];
     var $this = this;
     var isPhone = this.props.mobileMode,
@@ -898,6 +1153,7 @@ const AppStage = React.createClass({
                   drawOpt.zindex = 1;
                   $this.appDrawImage(image,drawOpt);
                 });
+                if(typeof callback === 'function') callback();
               }
               image.src = canvast.toDataURL();
           });
@@ -916,6 +1172,7 @@ const AppStage = React.createClass({
             drawOpt.zindex = 1;
             $this.appDrawImage(image,drawOpt);
           });
+          if(typeof callback === 'function') callback();
         }
         image.src = this.result;
       }
@@ -953,7 +1210,37 @@ const AppStage = React.createClass({
   },
   saveFile: function(opt){
   },
-  exportFile: function(opt){
+  exportFile: function(callback){
+    if(KineticStage==undefined)return;
+    var $this = this,
+        photo = {};
+    KineticStage.toDataURL({
+      callback: function(dataURL){
+        photo.data = dataURL;
+        $.ajax({
+          url: $this.props.url,
+          type: 'POST',
+          data: photo,
+          success: function(data) {
+            $this.setState({data: photo});
+            $this.setState({result: data.photoURL});
+          }.bind($this),
+          error: function(xhr, status, err) {
+            console.error($this.props.url, status, err.toString());
+          }.bind($this),
+          complete: function(){
+            var img = new Image();
+            img.onload = function(){
+              if(typeof callback === 'function') callback();
+              var obj = null;
+              obj =  (<BoostrapImage className="img-result" src={img.src}></BoostrapImage>);
+              $this.props.onMessage(obj,function(){});
+            }
+            img.src = $this.state.result; 
+          }.bind($this)
+        });
+      }
+    });
   },
   render: function() {
     var stageStyle = {
