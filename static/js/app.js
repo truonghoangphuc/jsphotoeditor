@@ -21,6 +21,7 @@ const AppFilterPreset =[
 const AppFilterObject = [
   {title:"Grayscale",method:"Grayscale"},
   {title:"Brighten",method:"Brighten",option:[{type:"range",title:"Brightness",properties:{min:-1,max:1,step:0.1,value:0,config:"brightness"}}]},
+  {title:"Contrast",method:"Contrast",option:[{type:"range",title:"Value",properties:{min:-1,max:1,step:0.1,value:0,config:"contrast"}}]},
   {title:"Invert",method:"Invert"},
   {title:"Blur",method:"Blur",option:[{type:"range",title:"Radius",properties:{min:0,max:100,step:1,value:10,config:"blurRadius"}}]},
   {title:"Mask",method:"Mask",option:[{type:"range",title:"Threshold",properties:{min:0,max:500,step:1,config:"threshold"}}]},
@@ -32,7 +33,14 @@ const AppFilterObject = [
     {type:"range",title:"WhiteLevel",properties:{min:-1,max:1,step:0.1,value:0.5,config:"embossWhiteLevel"}},
     {type:"select",title:"Direction",properties:{value:'top-left',config:"embossDirection"},options:['top-left','top','top-right','right','bottom-right','bottom','bottom-left','left']},
     {type:"range",title:"Blend",properties:{min:0,max:10,step:1,value:0,config:"embossBlend"}}]},
-  {title:"Enhance",option:[{type:"range",title:"Enhance",properties:{min:0,max:255,step:1,value:0,config:"enhance"}}]}
+  {title:"Enhance",option:[{type:"range",title:"Enhance",properties:{min:0,max:255,step:1,value:0,config:"enhance"}}]},
+  {title:"Posterize",option:[{type:"range",title:"Levels",properties:{min:0,max:1,step:0.1,value:0,config:"levels"}}]},
+  {title:"Noise",option:[{type:"range",title:"Value",properties:{min:0,max:1,step:0.1,value:0,config:"noise"}}]},
+  {title:"Pixelate",option:[{type:"range",title:"Size",properties:{min:0,max:100,step:1,value:0,config:"pixelSize"}}]},
+  {title:"Threshold",option:[{type:"range",title:"Threshold",properties:{min:0,max:1,step:0.1,value:0,config:"threshold"}}]},
+  {title:"Sepia"},
+  {title:"Solarize"},
+  {title:"Kaleidoscope",method:"Kaleidoscope",option:[{type:"range",title:"Power",properties:{min:0,max:10,step:1,value:2,config:"kaleidoscopePower"}},{type:"range",title:"Angle",properties:{min:0,max:360,step:1,value:0,config:"kaleidoscopeAngle"}}]}
 ];
 var jcrop_api;
 window.originalIMG = [];
@@ -667,6 +675,10 @@ const AppBottomPanel = React.createClass({
     if(this.state.appstage==null)return;
     this.state.appstage.appFilterOption(method,e.target.value);
   },
+  handleApply: function(e){
+    if(this.state.appstage==null)return;
+    this.state.appstage.saveApplyFilter();
+  },
   render: function() {
     var $this = this;
     var classes = (this.state.isOpening)?'show ':'';
@@ -704,15 +716,18 @@ const AppBottomPanel = React.createClass({
         );
       }
     });
-
     return (
       <div ref="root" className={classes + ' panel panel-success bottom-panel'} id={this.props.id}>
         <div className="panel-heading">
           <h3 className="panel-title">Effects</h3>
+          <button type="button" className="close" onClick={this.close}>&times;</button>
         </div>
         <div className="form-group">
           <select className="form-control" id={'select_'+this.props.id} onChange={this.handleChange}>{items}</select>
           {options}
+        </div>
+        <div className="form-group cmd">
+          <BootstrapButton onClick={this.handleApply} className="btn-primary">Apply</BootstrapButton>
         </div>
       </div>
     );
@@ -1079,6 +1094,21 @@ const AppStage = React.createClass({
       window.originalIMG.push(imgR);
     }
     img.src = cs;
+  },
+  saveApplyFilter: function(){
+    if(KineticStage==undefined)return;
+    var $this = this;
+    KineticStage.toDataURL({
+      callback: function(dataURL){
+        window.originalIMG = [];
+        var img = new Image();
+        img.src = dataURL;
+        var drawOpt={};
+        drawOpt.draggable = false;
+        drawOpt.zindex = 1;
+        $this.appDrawImage(img,drawOpt);
+      }
+    });
   },
   loadFile: function(files,callback){
     var file = files[0];
