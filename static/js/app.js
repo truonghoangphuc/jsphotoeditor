@@ -307,7 +307,6 @@ const DrawAppBox = React.createClass({
     var canvas = $('#targetCanvas')[0],
         can = $('.frame-item.active').find('canvas')[0],
         $image = $('#imgCapture');
-    //console.log(can);
     if(can!==null){
         var context = can.getContext("2d");
         can.width = canvas.width;
@@ -338,7 +337,7 @@ const DrawAppBox = React.createClass({
     o[0].innerText = i.value;
     this.refs.appstage.setOpacity(i.value/100);
   },
-  selectLayer: function(e,selected){
+  selectLayer: function(e,selected,layer){
     var arr = this.state.selectedLayers,
         k = e.target.getAttribute('data-id');
     if(!e.ctrlKey&&!e.metaKey){
@@ -348,12 +347,13 @@ const DrawAppBox = React.createClass({
     }
     arr[k]=selected;
     this.setState({selectedLayers:arr});
-    this.drawToStage(window.pslayers);
+    this.refs.appstage.setCurrentLayer(layer);
+    this.drawToStage(this.refs.appstage.state.layers);
   },
   drawToStage: function(layers){
     var $this = this;
     var layerItems = [];
-    if(layers!==null){
+    if(layers!==null&&layers!==undefined){
       layers.forEach(function(l,i){
         layerItems.push(<AppLayer key={i} id={i} data-ref={l} selected={$this.state.selectedLayers[i]} title={'Layer ' + (i+1)} handleClick={$this.selectLayer}></AppLayer>);
       });
@@ -1137,7 +1137,7 @@ const AppLayer = React.createClass({
     }
   },
   handleClick: function(e){
-    this.props.handleClick(e,!this.props.selected);
+    this.props.handleClick(e,!this.props.selected,this.props["data-ref"]);
   },
   render: function(){
     var classes = this.props.selected ? "selected" : "";
@@ -1151,15 +1151,18 @@ const AppStage = React.createClass({
     return ReactDOM.findDOMNode(this);
   },
   getInitialState: function() {
-    return {zoom:100,data:null,result:null,layers:null};
+    return {zoom:100,data:null,result:null,layers:null,currentlayer:null};
   },
   componentDidMount: function(){
     var $this = ReactDOM.findDOMNode(this);
     $this.style.height = document.querySelector('#main').offsetHeight- document.querySelector('.toolbar-wrapper').offsetHeight+'px';
   },
   getCurrentLayer: function(){
-    console.log(currentKineticLayer);
-    return (currentKineticLayer==null)?window.pslayers[(window.pslayers.length-1)]:currentKineticLayer;
+    //return (currentKineticLayer==null)?window.pslayers[(window.pslayers.length-1)]:currentKineticLayer;
+    return this.state.currentlayer;
+  },
+  setCurrentLayer: function(l){
+    this.setState({currentlayer:l});
   },
   appZoomIn: function(e){
     var z = this.state.zoom;
@@ -1199,7 +1202,6 @@ const AppStage = React.createClass({
     if(window.pslayers.length){
       hideWrap();
       var layer = this.getCurrentLayer();
-      console.log(layer);
       layer.setOpacity(v);
       KineticStage.draw();
     }
@@ -1248,10 +1250,11 @@ const AppStage = React.createClass({
       //console.log(imgR.parent);
       if(imgR.parent && imgR.parent.nodeType=='Layer'){
         var layer = {};
+        layer = imgR.parent;
         layer.key = window.pslayers.length;
         window.pslayers.push(layer);
         $this.setState({layers:window.pslayers});
-        $this.props.onDraw(window.pslayers);
+        $this.props.onDraw($this.state.layers);
       }
     }
     img.src = cs;
