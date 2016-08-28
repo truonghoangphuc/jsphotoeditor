@@ -11,7 +11,11 @@ const AppToolButtons = [
   {title:"Zoom In",icon:"fa-search-plus",method:"appZoomIn",group:"btn-group-command"},
   {title:"Zoom Out",icon:"fa-search-minus",method:"appZoomOut",group:"btn-group-command"},
   {title:"Insert Photo",icon:"fa-file-photo-o",method:"openModalPhoto",group:"btn-group-photo"},
-  {title:"Blend",icon:"fa-filter",method:"appOpenFilter",group:"btn-group-photo"}
+  {title:"Blend",icon:"fa-sliders",method:"appOpenFilter",group:"btn-group-photo"},
+  {title:"Transform",icon:"fa-arrows",method:"appTransform",group:"btn-group-layer"},
+  {title:"Merge",icon:"fa-file-zip-o",method:"appMergeLayer",group:"btn-group-layer"},
+  {title:"Bring to front",icon:"fa-sort-up",method:"appToFront",group:"btn-group-layer"},
+  {title:"Bring to back",icon:"fa-sort-down",method:"appToBack",group:"btn-group-layer"}
 ];
 const AppFilterPreset =[
   {title:"Juno",img:""},
@@ -25,7 +29,7 @@ const AppFilterObject = [
   {title:"Invert",method:"Invert"},
   {title:"Blur",method:"Blur",option:[{type:"range",title:"Radius",properties:{min:0,max:100,step:1,value:10,config:"blurRadius"}}]},
   {title:"Mask",method:"Mask",option:[{type:"range",title:"Threshold",properties:{min:0,max:500,step:1,config:"threshold"}}]},
-  {title:"RGB",method:"RGB",option:[{type:"range",title:"Red",properties:{min:0,max:255,step:1,value:125,config:"red"}},{type:"range",title:"Green",properties:{min:0,max:255,step:1,value:125,config:"green"}},{type:"range",title:"Blue",properties:{min:0,max:255,step:1,value:125,config:"blue"}}]},
+  {title:"RGB",method:"RGB",option:[{type:"range",title:"Red",properties:{min:0,max:255,step:1,value:0,config:"red"}},{type:"range",title:"Green",properties:{min:0,max:255,step:1,value:0,config:"green"}},{type:"range",title:"Blue",properties:{min:0,max:255,step:1,value:0,config:"blue"}}]},
   {title:"HSV",method:"HSV",option:[{type:"range",title:"Hue",properties:{min:0,max:359,step:1,value:0,config:"hue"}},{type:"range",title:"Saturation",properties:{min:-1,max:1,step:0.1,value:0,config:"saturation"}},{type:"range",title:"Value",properties:{min:-1,max:1,step:0.1,value:0,config:"value"}}]},
   {title:"HSL",method:"HSL",option:[{type:"range",title:"Hue",properties:{min:0,max:359,step:1,value:0,config:"hue"}},{type:"range",title:"Saturation",properties:{min:-1,max:1,step:0.1,value:0,config:"saturation"}},{type:"range",title:"Luminance",properties:{min:-1,max:1,step:0.1,value:0,config:"luminance"}}]},
   {title:"Emboss",method:"Emboss",option:[
@@ -43,14 +47,37 @@ const AppFilterObject = [
   {title:"Kaleidoscope",method:"Kaleidoscope",option:[{type:"range",title:"Power",properties:{min:0,max:10,step:1,value:2,config:"kaleidoscopePower"}},{type:"range",title:"Angle",properties:{min:0,max:360,step:1,value:0,config:"kaleidoscopeAngle"}}]}
 ];
 var jcrop_api;
-window.originalIMG = [];
+window.pslayers = [];
 
 const DrawAppBox = React.createClass({
   getInitialState: function() {
-    return {message:null};
+    return {message:null,panels:null,layerItems:null,selectedLayers:[]};
   },
   componentDidMount: function() {
+    var panels = [],$this=this;
+    for (var ref in this.refs) {
+      //console.log(this.refs[ref].props.type);
+      if(this.refs[ref].constructor.displayName=='AppPanel'){
+        panels.push(this.refs[ref]);
+        var i = panels.length;
+        var panel = this.refs[ref];
+        if(i>1){
+          var pD = ReactDOM.findDOMNode(panels[i-2]);
+          panel.move(panel.state.right,panels[i-2].state.top+pD.offsetHeight);
+        }
+      }
+      this.setState({panels:panels});
+    }
     this.refs.panelmanual.setStage(this.refs.appstage);
+    var layers = this.refs.appstage.state.layers,
+        layerItems = [];
+    if(layers!==null){
+      layers.forEach(function(l,i){
+        layerItems.push(<AppLayer key={i} data-ref={l} title={'Layer ' + (i+1)} handleClick={$this.selectLayer}></AppLayer>);
+      });
+      layerItems.reverse();
+      this.setState({layerItems:layerItems});
+    }
   },
   componentWillUnmount: function(){
     console.log('AppBox componentWillUnmount');
@@ -304,6 +331,36 @@ const DrawAppBox = React.createClass({
       $this.hideLoading();
     });
   },
+  handleOpacity: function(e){
+    var i = e.target,
+        l = i.previousElementSibling||i.previousSibling,
+        o = l.children;
+    o[0].innerText = i.value;
+    this.refs.appstage.setOpacity(i.value/100);
+  },
+  selectLayer: function(e,selected){
+    var arr = this.state.selectedLayers,
+        k = e.target.getAttribute('data-id');
+    if(!e.ctrlKey&&!e.metaKey){
+      for(var i=0,len=arr.length;i<len;i++){
+        arr[i] = false;
+      }
+    }
+    arr[k]=selected;
+    this.setState({selectedLayers:arr});
+    this.drawToStage(window.pslayers);
+  },
+  drawToStage: function(layers){
+    var $this = this;
+    var layerItems = [];
+    if(layers!==null){
+      layers.forEach(function(l,i){
+        layerItems.push(<AppLayer key={i} id={i} data-ref={l} selected={$this.state.selectedLayers[i]} title={'Layer ' + (i+1)} handleClick={$this.selectLayer}></AppLayer>);
+      });
+      layerItems.reverse();
+      this.setState({layerItems:layerItems});
+    }
+  },
   render: function() {
     var $this = this;
     var modal = null;
@@ -328,7 +385,7 @@ const DrawAppBox = React.createClass({
           </div>
           <div className="col-xs-2 text-center">&times;</div>
           <div className="col-xs-5">
-            <BootstrapInput className="form-control" placeholder="width" type="number" min="50" max="10000"></BootstrapInput>
+            <BootstrapInput className="form-control" placeholder="height" type="number" min="50" max="10000"></BootstrapInput>
           </div>
         </div>
         <div className="form-group row">
@@ -364,12 +421,25 @@ const DrawAppBox = React.createClass({
     );
     var panelManualFilter = null;
     panelManualFilter = (
-      <AppBottomPanel ref="panelmanual" items={AppFilterObject} className="manual-filters" id="panelManualEffect"></AppBottomPanel>
+      <AppPanel ref="panelmanual" className="manual-filters" id="panelManualEffect" title="Filters">
+        <AppFilterPanel appstage={this.refs.appstage} items={AppFilterObject}></AppFilterPanel>
+      </AppPanel>
+    );
+    var panelLayer = null;
+    panelLayer = (
+      <AppPanel ref="panellayer" title="Layers" className="layers-panel" id="panelLayers">
+        <div className="form-group">
+          <label>Opacity: <strong>100</strong>%</label><input type="range" max="100" min="0" step="1" defaultValue="100" onChange={this.handleOpacity}/>
+        </div>
+        <div className="form-group group-layers">
+          {$this.state.layerItems}
+        </div>
+      </AppPanel>
     );
     return (
       <div className="main-app">
         <AppToolbar buttons={AppToolButtons} exportFile={this.handleExportPhoto} openFileModal={this.openFileModal} loadFile={this.loadFile} newFile={this.openNewFileModal} openJCrop={this.openCropFileModal} zoomIn={this.handleZoomIn} zoomOut={this.handleZoomOut} openEffectPanel={this.openEffectPanel} />
-        <AppStage ref="appstage" mobileMode={this.props.mobileMode} url="/api/photo" onMessage={this.showMessage}/>
+        <AppStage ref="appstage" mobileMode={this.props.mobileMode} url="/api/photo" onMessage={this.showMessage} onDraw={this.drawToStage}/>
         <BootstrapInput type="file" className="file-dialog" id="fileDialog" onChange={this.handleOpenFile}></BootstrapInput>
         {modal}
         {modalEditPhoto}
@@ -377,6 +447,7 @@ const DrawAppBox = React.createClass({
         {modalJcrop}
         {modalMessage}
         {panelManualFilter}
+        {panelLayer}
         <BootstrapLoading ref="apploading"></BootstrapLoading>
       </div>
     );
@@ -616,13 +687,7 @@ const BootstrapLoading = React.createClass({
     );
   }
 });
-const AppBottomPanel = React.createClass({
-  getInitialState: function(){
-    return {
-      isOpening:false,
-      appstage:null
-    }
-  },
+const AppFilterPanel = React.createClass({
   componentDidMount: function() {
     var $this = this;
     var opt = ReactDOM.findDOMNode(this).querySelectorAll('.option-item');
@@ -643,22 +708,13 @@ const AppBottomPanel = React.createClass({
   componentWillUnmount: function() {
     
   },
-  setStage:function(stage){
-    this.setState({appstage:stage});
-  },
-  close: function() {
-    this.setState({isOpening:false});
-  },
-  open: function() {
-    this.setState({isOpening:true});
-  },
   getInstance: function(){
     return $(this.refs.root);
   },
   handleChange: function(e){
-    if(this.state.appstage==null)return;
+    if(this.props.appstage==null)return;
     var method = e.target.value;
-    this.state.appstage.appFilter(method);
+    this.props.appstage.appFilter(method);
     var optRef = e.target.options[e.target.selectedIndex].getAttribute('data-ref');
     var s = document.querySelector('.effect-option.show');
     if(s){
@@ -672,17 +728,23 @@ const AppBottomPanel = React.createClass({
   handleOption: function(e){
     var opt = e.target.getAttribute('config');
     var method = opt.toString();
-    if(this.state.appstage==null)return;
-    this.state.appstage.appFilterOption(method,e.target.value);
+    if(this.props.appstage==null)return;
+    this.props.appstage.appFilterOption(method,e.target.value);
   },
   handleApply: function(e){
-    if(this.state.appstage==null)return;
-    this.state.appstage.saveApplyFilter();
+    if(this.props.appstage==null)return;
+    this.props.appstage.saveApplyFilter();
+  },
+  handleCancel: function(e){
+    if(this.props.appstage==null)return;
+    this.props.appstage.cancelFilter();
+  },
+  handleReset: function(e){
+    if(this.props.appstage==null)return;
+    this.props.appstage.resetFilter();
   },
   render: function() {
     var $this = this;
-    var classes = (this.state.isOpening)?'show ':'';
-    classes+=this.props.className;
     var items = [],
         options = [];
     items.push(<option key="0" value="">None</option>);
@@ -717,17 +779,75 @@ const AppBottomPanel = React.createClass({
       }
     });
     return (
-      <div ref="root" className={classes + ' panel panel-success bottom-panel'} id={this.props.id}>
-        <div className="panel-heading">
-          <h3 className="panel-title">Effects</h3>
-          <button type="button" className="close" onClick={this.close}>&times;</button>
-        </div>
+      <div className="form" ref="root">
         <div className="form-group">
           <select className="form-control" id={'select_'+this.props.id} onChange={this.handleChange}>{items}</select>
           {options}
         </div>
         <div className="form-group cmd">
           <BootstrapButton onClick={this.handleApply} className="btn-primary">Apply</BootstrapButton>
+          <BootstrapButton onClick={this.handleCancel} className="btn-danger">Cancel</BootstrapButton>
+        </div>
+      </div>
+    );
+  }
+});
+const AppPanel = React.createClass({
+  getInitialState: function(){
+    return {
+      isOpening:true,
+      right:0,
+      top:0,
+      zindex:1,
+      appstage:null
+    }
+  },
+  componentDidMount: function() {
+  },
+  componentWillUnmount: function() {
+    
+  },
+  setStage:function(stage){
+    this.setState({appstage:stage});
+  },
+  close: function() {
+    this.setState({isOpening:false});
+  },
+  open: function() {
+    this.setState({isOpening:true});
+  },
+  toggle: function() {
+    this.setState({isOpening:!this.state.isOpening});
+  },
+  move: function(x,y) {
+    this.setState({right:x,top:y});
+  },
+  moveend: function(e) {
+    var div = e.target,
+        divL = div.offsetLeft,
+        divT = div.offsetTop,
+        l = e.clientX,
+        t = e.clientY,
+        r;
+    r = (window.innerWidth - l)-300;
+    this.setState({right:r,top:t-div.offsetHeight,zindex:2});
+  },
+  getInstance: function(){
+    return $(this.refs.root);
+  },
+  render: function() {
+    var $this = this;
+    var classes = (this.state.isOpening)?'show ':'';
+    classes+=this.props.className;
+    var styleInline = {right:this.state.right,top:this.state.top,zIndex:this.state.zindex};
+    return (
+      <div ref="root" className={classes + ' panel panel-success window-panel'} id={this.props.id} style={styleInline}>
+        <div className="panel-heading" onDragEnd={this.moveend} draggable="true">
+          <h3 className="panel-title">{this.props.title}</h3>
+          <button type="button" className="close" onClick={this.toggle}>&times;</button>
+        </div>
+        <div className="panel-body">
+          {this.props.children}
         </div>
       </div>
     );
@@ -932,7 +1052,6 @@ const AppEditUploadItem = React.createClass({
             }, function() {
                 jcrop_api = this;
                 $('body').on('mousemove',function(e){
-                  //console.log(e.shiftKey);
                   if(e.shiftKey){
                     jcrop_api.setOptions({
                         aspectRatio: '1.0'
@@ -986,42 +1105,66 @@ const AppEditUpload = React.createClass({
     );
   }
 });
+const AppLayer = React.createClass({
+  getInitialState: function() {
+    return {opacity:1,zindex:1,name:''};
+  },
+  componentDidMount: function(){
+    this.setName(this.props.title);
+  },
+  setOpacity: function(v){
+    this.setState({opacity:v});
+  },
+  setName: function(v){
+    this.setState({name:v});
+  },
+  setZIndex: function(v){
+    this.setState({zindex:v});
+  },
+  enableEditName: function(e){
+    var div = e.target;
+    div.contentEditable = true;
+    div.classList.add('editing');
+  },
+  handleKeyPress: function(e){
+    var div = e.target;
+    if(e.charCode=='13'){
+      if(div.getAttribute('contentEditable')=='true'){
+        this.setName(div.textContent);
+        div.removeAttribute('contenteditable');
+        div.classList.remove('editing');
+      }
+    }
+  },
+  handleClick: function(e){
+    this.props.handleClick(e,!this.props.selected);
+  },
+  render: function(){
+    var classes = this.props.selected ? "selected" : "";
+    return(
+      <div data-id={this.props.id} className={classes + ' layer'} title={this.props.title} onKeyPress={this.handleKeyPress} onClick={this.handleClick} onDoubleClick={this.enableEditName}>{this.state.name}</div>
+    );
+  }
+});
 const AppStage = React.createClass({
   getCurrentInstance: function(){
     return ReactDOM.findDOMNode(this);
   },
   getInitialState: function() {
-    return {zoom:100,data:null,result:null};
+    return {zoom:100,data:null,result:null,layers:null};
   },
   componentDidMount: function(){
     var $this = ReactDOM.findDOMNode(this);
     $this.style.height = document.querySelector('#main').offsetHeight- document.querySelector('.toolbar-wrapper').offsetHeight+'px';
   },
   getCurrentLayer: function(){
-    return window.originalIMG[0];
+    console.log(currentKineticLayer);
+    return (currentKineticLayer==null)?window.pslayers[(window.pslayers.length-1)]:currentKineticLayer;
   },
   appZoomIn: function(e){
     var z = this.state.zoom;
     if(e.shiftKey){
-      var viewstage = this.getCurrentInstance();
-      var w = viewstage.offsetWidth,
-          h = viewstage.offsetHeight,
-          ow = KineticStage.width(),
-          oh = KineticStage.height();
-      if(ow<=w&&oh<=h){
-        this.setState({zoom:(z+1)});
-      }else{
-        var r = ow/oh,
-            rz = 100;
-        if(r<=1){
-          var nh = oh*w/ow;
-          rz = nh/oh*100;
-        }else{
-          var nw = ow*h/oh;
-          rz = nw/ow*100;
-        }
-        this.setState({zoom:rz});
-      }
+      this.setState({zoom:100});
     }else{
       this.setState({zoom:(z+1)});
     }
@@ -1052,8 +1195,18 @@ const AppStage = React.createClass({
       this.setState({zoom:(z-1)});
     }
   },
+  setOpacity: function(v){
+    if(window.pslayers.length){
+      hideWrap();
+      var layer = this.getCurrentLayer();
+      console.log(layer);
+      layer.setOpacity(v);
+      KineticStage.draw();
+    }
+  },
   appFilter: function(filter,callback){
-    if(window.originalIMG.length){
+    if(window.pslayers.length){
+      hideWrap();
       var layer = this.getCurrentLayer();
       var config = {
         x:0,
@@ -1068,13 +1221,14 @@ const AppStage = React.createClass({
     }
   },
   appFilterOption: function(setting,value){
-    if(window.originalIMG.length){
+    if(window.pslayers.length){
       var layer = this.getCurrentLayer();
       layer[setting](value);
       KineticStage.draw();
     }
   },
   appDrawImage: function(src,opt){
+    //add layer when draw image
     var cs;
     if(typeof src=='string'){
       cs=src;
@@ -1087,11 +1241,18 @@ const AppStage = React.createClass({
       }
     }
     var img = new Image();
-    var imgR;
+    var imgR,
+        $this = this;
     img.onload = function() {
       imgR=drawImage(this, 0, 0, img.width, img.height,opt.zindex, opt.draggable);
-      imgR.key = window.originalIMG.length;
-      window.originalIMG.push(imgR);
+      //console.log(imgR.parent);
+      if(imgR.parent && imgR.parent.nodeType=='Layer'){
+        var layer = {};
+        layer.key = window.pslayers.length;
+        window.pslayers.push(layer);
+        $this.setState({layers:window.pslayers});
+        $this.props.onDraw(window.pslayers);
+      }
     }
     img.src = cs;
   },
@@ -1100,7 +1261,7 @@ const AppStage = React.createClass({
     var $this = this;
     KineticStage.toDataURL({
       callback: function(dataURL){
-        window.originalIMG = [];
+        window.pslayers = [];
         var img = new Image();
         img.src = dataURL;
         var drawOpt={};
@@ -1109,6 +1270,27 @@ const AppStage = React.createClass({
         $this.appDrawImage(img,drawOpt);
       }
     });
+  },
+  cancelFilter: function(){
+    if(window.pslayers.length){
+      var layer = this.getCurrentLayer();
+      var config = {
+        x:0,
+        y:0,
+        width: layer.width(),
+        height: layer.height()
+      }
+      layer.cache(config);
+      layer.filters([]);
+      KineticStage.draw();
+      if(typeof callback === 'function') callback();
+    }
+  },
+  resetFilter: function(){
+    if(window.pslayers.length){
+      var layer = this.getCurrentLayer();
+      //TODO
+    }
   },
   loadFile: function(files,callback){
     var file = files[0];
@@ -1274,7 +1456,8 @@ const AppStage = React.createClass({
   },
   render: function() {
     var stageStyle = {
-      zoom: (this.state.zoom/100)
+      WebkitTransform:'scale3d('+this.state.zoom/100+','+this.state.zoom/100+','+'1)',
+      transform: 'scale3d('+this.state.zoom/100+','+this.state.zoom/100+','+'1)'
     };
     return (
       <div id="stage" className="stage-wrapper">

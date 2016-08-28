@@ -6099,15 +6099,13 @@ var Kinetic = {};
         var contrast = this.contrast() * 255,
             data = imageData.data,
             len = data.length,
-            i;
-
-        for(i = 0; i < len; i += 4) {
-            // red
-            data[i] += contrast;
-            // green
-            data[i + 1] += contrast;
-            // blue
-            data[i + 2] += contrast;
+            i,
+            factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+    
+        for(var i=0;i<data.length;i+=4){
+            data[i] = factor * (data[i] - 128) + 128;
+            data[i+1] = factor * (data[i+1] - 128) + 128;
+            data[i+2] = factor * (data[i+2] - 128) + 128;
         }
     };
 
