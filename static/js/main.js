@@ -2,7 +2,6 @@ function encode64(e){e=escape(e);var t,r,n,i,o,a="",d="",c="",l=0;do t=e.charCod
 function getParameterByName(e){e=e.replace(/[\[]/,"\\[").replace(/[\]]/,"\\]");var t=new RegExp("[\\?&]"+e+"=([^&#]*)"),r=t.exec(location.search);return null==r?"":decodeURIComponent(r[1].replace(/\+/g," "))}
 function getCookie(e){var t=document.cookie,r=t.indexOf(" "+e+"=");if(-1==r&&(r=t.indexOf(e+"=")),-1==r)t=null;else{r=t.indexOf("=",r)+1;var n=t.indexOf(";",r);-1==n&&(n=t.length),t=unescape(t.substring(r,n))}return t}
 function getRandomArrayElements(e,t){for(var r,n=[],i=e.slice(0),o=0;t>o;++o)r=Math.floor(Math.random()*i.length),n.push(i[r]),i[r]=i.pop();return n}
-function isEmail(e){var t=/^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/;return!!t.test(e)}function isPhonenumber(e){var t=/(\(?(\d|(\d[- ]\d))\)?[-. ]?)?(\d\.?\d\.?\d.?\d.?\d.?\d.?\d.?\d.?\d.?\d)/;return!(""==e||!t.test(e))}
 function convertTime(e){e=e.replace("/Date(","").replace(")/","");var t=new Date(parseFloat(e)),r=[t.getDate(),t.getMonth()+1,t.getFullYear()],n=[t.getHours(),curr_m=t.getMinutes(),curr_s=t.getSeconds()];return r.join("-")+" "+n.join(":")}
 function getInternetExplorerVersion(){var e=-1;if("Microsoft Internet Explorer"==navigator.appName){var t=navigator.userAgent,r=new RegExp("MSIE ([0-9]{1,}[.0-9]{0,})");null!=r.exec(t)&&(e=parseFloat(RegExp.$1))}else if("Netscape"==navigator.appName){var t=navigator.userAgent,r=new RegExp("Trident/.*rv:([0-9]{1,}[.0-9]{0,})");null!=r.exec(t)&&(e=parseFloat(RegExp.$1))}return e}
 function arrayShuffle(e){for(var t,r,n=e.length;0!==n;)r=Math.floor(Math.random()*n),n-=1,t=e[n],e[n]=e[r],e[r]=t;return e}
@@ -26,6 +25,10 @@ var validation = {
     isNotSpecial: function(e){
         var t=/^[a-zA-Z0-9]+$/;
         return!!t.test(e)
+    },
+    isPhonenumber: function(e){
+        var t=/(\(?(\d|(\d[- ]\d))\)?[-. ]?)?(\d\.?\d\.?\d.?\d.?\d.?\d.?\d.?\d.?\d.?\d)/;
+        return!(""==e||!t.test(e))
     }
 };  
 
@@ -129,3 +132,12 @@ var $viewport=0, windowWidth,windowHeight;
     };
     $(window).bind('resize', resizeMainWindow);
 });
+function getNodeIndex(node) {
+    var index = 0;
+    while ( (node = node.previousSibling) ) {
+        if (node.nodeType != 3 || !/^\s*$/.test(node.data)) {
+            index++;
+        }
+    }
+    return index;
+}

@@ -213,7 +213,7 @@ img.jcrop-preview{max-width:none}
 #main > div {height: 100%;position: relative;}
 .main-app {background: #fefefe;min-height: 100%}
 .stage-wrapper {overflow: auto;background: #999;padding:0;text-align: center;padding: 20px;}
-#savestage{margin:0 auto;position:relative;overflow:auto;font-size: 0;display: inline-block;box-shadow: 0 0 5px rgba(0,0,0,0.4);-webkit-transform-origin:0 0;transform-origin:0 0;}
+#savestage{margin:0 auto;position:relative;overflow:auto;font-size: 0;display: inline-block;box-shadow: 0 0 5px rgba(0,0,0,0.4);-webkit-transform-origin:0 0;transform-origin:0 0;background:url('../images/grid_transparent.png') repeat center #fff;background-size: cover;}
 #savestage canvas {cursor: move;}
 .toolbar-wrapper .nav {padding: 2px 0;}
 .toolbar-wrapper .nav .btn-group {margin: 0;}
@@ -287,10 +287,11 @@ img.jcrop-preview{max-width:none}
 .window-panel .effect-option.show {display: block;}
 
 .layers-panel {}
-.layers-panel .layer {padding: 4px;border: solid 1px #999;border-left:dotted 4px #666;background:#ccc;color: #000;font-size: 12px;font-weight: 700;white-space: nowrap;text-overflow: ellipsis;overflow: hidden;cursor: pointer;}
-.layers-panel .layer.editing {border: solid 1px #ff5722;border-left:dotted 4px #ff5722;cursor: text;}
+.layers-panel .layer {padding: 4px 4px 4px 2px;border: solid 1px #999;background:#ccc;color: #000;font-size: 12px;font-weight: 700;white-space: nowrap;text-overflow: ellipsis;overflow: hidden;cursor: pointer;}
 .layers-panel .layer.selected {background: #333;color: #fff;}
-
+.layers-panel .layer .material-icons {vertical-align: middle;cursor: pointer;}
+.layers-panel .layer .input {background: none;cursor: text;border: solid 1px transparent;display: inline-block;padding: 4px 10px;}
+.layers-panel .layer .input.editing {background: #fff;border: solid 1px #333;cursor: text;}
 
 input[type="range"] {
   -webkit-appearance: none !important;

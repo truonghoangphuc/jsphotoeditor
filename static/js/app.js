@@ -47,7 +47,6 @@ const AppFilterObject = [
   {title:"Kaleidoscope",method:"Kaleidoscope",option:[{type:"range",title:"Power",properties:{min:0,max:10,step:1,value:2,config:"kaleidoscopePower"}},{type:"range",title:"Angle",properties:{min:0,max:360,step:1,value:0,config:"kaleidoscopeAngle"}}]}
 ];
 var jcrop_api;
-window.pslayers = [];
 
 const DrawAppBox = React.createClass({
   getInitialState: function() {
@@ -69,15 +68,7 @@ const DrawAppBox = React.createClass({
       this.setState({panels:panels});
     }
     this.refs.panelmanual.setStage(this.refs.appstage);
-    var layers = this.refs.appstage.state.layers,
-        layerItems = [];
-    if(layers!==null){
-      layers.forEach(function(l,i){
-        layerItems.push(<AppLayer key={i} data-ref={l} title={'Layer ' + (i+1)} handleClick={$this.selectLayer}></AppLayer>);
-      });
-      layerItems.reverse();
-      this.setState({layerItems:layerItems});
-    }
+    this.drawToStage(this.refs.appstage.state.layers);
   },
   componentWillUnmount: function(){
     console.log('AppBox componentWillUnmount');
@@ -337,7 +328,11 @@ const DrawAppBox = React.createClass({
     o[0].innerText = i.value;
     this.refs.appstage.setOpacity(i.value/100);
   },
+  handleTransform: function(e){
+    this.refs.appstage.appTransform(e);
+  },
   selectLayer: function(e,selected,layer){
+    var $this = this;
     var arr = this.state.selectedLayers,
         k = e.target.getAttribute('data-id');
     if(!e.ctrlKey&&!e.metaKey){
@@ -347,8 +342,11 @@ const DrawAppBox = React.createClass({
     }
     arr[k]=selected;
     this.setState({selectedLayers:arr});
-    this.refs.appstage.setCurrentLayer(layer);
-    this.drawToStage(this.refs.appstage.state.layers);
+    this.refs.appstage.setCurrentLayer(layer,function(){
+      $this.drawToStage($this.refs.appstage.state.layers);
+      var obj = $this.refs.appstage.state.currentlayer;
+      showWrap(obj);
+    }); 
   },
   drawToStage: function(layers){
     var $this = this;
@@ -358,7 +356,21 @@ const DrawAppBox = React.createClass({
         layerItems.push(<AppLayer key={i} id={i} data-ref={l} selected={$this.state.selectedLayers[i]} title={'Layer ' + (i+1)} handleClick={$this.selectLayer}></AppLayer>);
       });
       layerItems.reverse();
-      this.setState({layerItems:layerItems});
+      this.setState({layerItems:layerItems},function(){
+        var sortable = Sortable.create(document.querySelector('.group-layers'),{
+          handle: '.drag-handle',
+          animation: 150,
+          onEnd: function(evt) {
+            //console.log(evt);
+          },
+          onUpdate: function(evt) {
+            var i = evt.item.getAttribute('data-id'),
+                x = $this.refs.appstage.state.layers.length - getNodeIndex(evt.item);
+            var layer = $this.refs.appstage.state.layers[i];
+            $this.refs.appstage.setZIndex(layer,x);
+          }
+        });
+      });
     }
   },
   render: function() {
@@ -438,7 +450,7 @@ const DrawAppBox = React.createClass({
     );
     return (
       <div className="main-app">
-        <AppToolbar buttons={AppToolButtons} exportFile={this.handleExportPhoto} openFileModal={this.openFileModal} loadFile={this.loadFile} newFile={this.openNewFileModal} openJCrop={this.openCropFileModal} zoomIn={this.handleZoomIn} zoomOut={this.handleZoomOut} openEffectPanel={this.openEffectPanel} />
+        <AppToolbar buttons={AppToolButtons} appTransform={this.handleTransform} exportFile={this.handleExportPhoto} openFileModal={this.openFileModal} loadFile={this.loadFile} newFile={this.openNewFileModal} openJCrop={this.openCropFileModal} zoomIn={this.handleZoomIn} zoomOut={this.handleZoomOut} openEffectPanel={this.openEffectPanel} />
         <AppStage ref="appstage" mobileMode={this.props.mobileMode} url="/api/photo" onMessage={this.showMessage} onDraw={this.drawToStage}/>
         <BootstrapInput type="file" className="file-dialog" id="fileDialog" onChange={this.handleOpenFile}></BootstrapInput>
         {modal}
@@ -494,6 +506,11 @@ const AppToolbarButton = React.createClass({
       this.props.exportFile(e);
     }
   },
+  appTransform: function(e){
+    if(typeof this.props.appTransform==='function'){
+      this.props.appTransform(e);
+    }
+  },
   handleClick: function(e){
     var method = this.props.button.method;
     switch(method){
@@ -517,6 +534,9 @@ const AppToolbarButton = React.createClass({
         break;
       case 'exportImage':
         this.exportFile(e);
+        break;
+      case 'appTransform':
+        this.appTransform(e);
         break;
       default:
         break;
@@ -546,7 +566,7 @@ const AppToolbarGroup = React.createClass({
     var btns = [],
         currentIndex = 0;
     this.props.buttons.forEach(function(button) {
-      btns.push(<AppToolbarButton button={button} key={this.props.groupid + '_' + currentIndex} exportFile={this.props.exportFile} openFilter={this.props.openFilter} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
+      btns.push(<AppToolbarButton button={button} key={this.props.groupid + '_' + currentIndex} appTransform={this.props.appTransform} exportFile={this.props.exportFile} openFilter={this.props.openFilter} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
         currentIndex++;
     }.bind(this));
     var classgroup = "btn-group " + this.props.buttons[0].group;
@@ -567,13 +587,13 @@ const AppToolbar = React.createClass({
       if(button.group==currentGroup){
         grouparr.push(button);
       }else{
-        groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} exportFile={this.props.exportFile} openFilter={this.props.openEffectPanel} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
+        groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} appTransform={this.props.appTransform} exportFile={this.props.exportFile} openFilter={this.props.openEffectPanel} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
         grouparr = [];
         currentIndex++;
         grouparr.push(button);
       }
       currentGroup = button.group;
-      if(index==this.props.buttons.length-1)groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} exportFile={this.props.exportFile} openFilter={this.props.openEffectPanel} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
+      if(index==this.props.buttons.length-1)groups.push(<AppToolbarGroup buttons={grouparr} key={currentIndex} groupid={currentIndex} appTransform={this.props.appTransform} exportFile={this.props.exportFile} openFilter={this.props.openEffectPanel} zoomIn={this.props.zoomIn} zoomOut={this.props.zoomOut} loadFile={this.props.loadFile} newFile={this.props.newFile} openFileModal={this.props.openFileModal}/>);
     }.bind(this));
     return (
       <div className="toolbar-wrapper">
@@ -1086,6 +1106,9 @@ const AppEditUpload = React.createClass({
   getInitialState: function() {
     return {data: []};
   },
+  componentDidMount: function () {
+    var sortable = Sortable.create(document.querySelector('#editArea'));
+  },
   updateData: function(newdata){
     this.setState({data:newdata});
   },
@@ -1142,7 +1165,10 @@ const AppLayer = React.createClass({
   render: function(){
     var classes = this.props.selected ? "selected" : "";
     return(
-      <div data-id={this.props.id} className={classes + ' layer'} title={this.props.title} onKeyPress={this.handleKeyPress} onClick={this.handleClick} onDoubleClick={this.enableEditName}>{this.state.name}</div>
+      <div data-id={this.props.id} className={classes + ' layer'} title={this.props.title} onClick={this.handleClick} >
+        <i className="material-icons dp32 drag-handle">view_headline</i>
+        <span className="input layer-name" onKeyPress={this.handleKeyPress} onDoubleClick={this.enableEditName}>{this.state.name}</span>
+      </div>
     );
   }
 });
@@ -1151,18 +1177,26 @@ const AppStage = React.createClass({
     return ReactDOM.findDOMNode(this);
   },
   getInitialState: function() {
-    return {zoom:100,data:null,result:null,layers:null,currentlayer:null};
+    return {zoom:100,data:null,result:null,layers:[],currentlayer:null};
   },
   componentDidMount: function(){
     var $this = ReactDOM.findDOMNode(this);
     $this.style.height = document.querySelector('#main').offsetHeight- document.querySelector('.toolbar-wrapper').offsetHeight+'px';
   },
   getCurrentLayer: function(){
-    //return (currentKineticLayer==null)?window.pslayers[(window.pslayers.length-1)]:currentKineticLayer;
     return this.state.currentlayer;
   },
-  setCurrentLayer: function(l){
-    this.setState({currentlayer:l});
+  setCurrentLayer: function(l,callback){
+    this.setState({currentlayer:l},function(){
+      if(typeof callback=='function')callback();
+    });
+  },
+  appRemoveLayer: function(layer){
+    var arr = this.state.layers;
+    arr = arr.filter(function(l) {
+      return l.key !== layer.key;
+    });
+    this.setState({layers:arr});
   },
   appZoomIn: function(e){
     var z = this.state.zoom;
@@ -1199,15 +1233,25 @@ const AppStage = React.createClass({
     }
   },
   setOpacity: function(v){
-    if(window.pslayers.length){
+    if(this.state.layers.length){
       hideWrap();
       var layer = this.getCurrentLayer();
       layer.setOpacity(v);
       KineticStage.draw();
     }
   },
+  setZIndex: function(l,v){
+    l.setZIndex(v);
+    KineticStage.draw();
+  },
+  appTransform: function(){
+    if(this.state.layers.length){
+      var layer = this.getCurrentLayer();
+      showWrap(layer);
+    }
+  },
   appFilter: function(filter,callback){
-    if(window.pslayers.length){
+    if(this.state.layers.length&&filter!==''){
       hideWrap();
       var layer = this.getCurrentLayer();
       var config = {
@@ -1223,13 +1267,13 @@ const AppStage = React.createClass({
     }
   },
   appFilterOption: function(setting,value){
-    if(window.pslayers.length){
+    if(this.state.layers.length){
       var layer = this.getCurrentLayer();
       layer[setting](value);
       KineticStage.draw();
     }
   },
-  appDrawImage: function(src,opt){
+  appDrawImage: function(src,opt,callback){
     //add layer when draw image
     var cs;
     if(typeof src=='string'){
@@ -1249,33 +1293,36 @@ const AppStage = React.createClass({
       imgR=drawImage(this, 0, 0, img.width, img.height,opt.zindex, opt.draggable);
       //console.log(imgR.parent);
       if(imgR.parent && imgR.parent.nodeType=='Layer'){
-        var layer = {};
+        var layer = {}, arr = $this.state.layers;
         layer = imgR.parent;
-        layer.key = window.pslayers.length;
-        window.pslayers.push(layer);
-        $this.setState({layers:window.pslayers});
+        layer.key = arr.length;
+        arr.push(layer);
+        $this.setState({layers:arr});
         $this.props.onDraw($this.state.layers);
+        if(typeof callback =='function') callback();
       }
     }
     img.src = cs;
   },
   saveApplyFilter: function(){
-    if(KineticStage==undefined)return;
-    var $this = this;
-    KineticStage.toDataURL({
-      callback: function(dataURL){
-        window.pslayers = [];
-        var img = new Image();
-        img.src = dataURL;
-        var drawOpt={};
-        drawOpt.draggable = false;
-        drawOpt.zindex = 1;
-        $this.appDrawImage(img,drawOpt);
-      }
-    });
+    if(this.state.layers.length){
+      hideWrap();
+      var $this = this;
+      var layer = this.getCurrentLayer();
+      layer.toImage({
+        callback: function(img){
+          $this.appRemoveLayer(layer);
+          layer.remove();
+          var drawOpt={};
+          drawOpt.draggable = true;
+          drawOpt.zindex = 1;
+          $this.appDrawImage(img,drawOpt);
+        }
+      });
+    }
   },
   cancelFilter: function(){
-    if(window.pslayers.length){
+    if($this.state.layers.length){
       var layer = this.getCurrentLayer();
       var config = {
         x:0,
@@ -1290,7 +1337,7 @@ const AppStage = React.createClass({
     }
   },
   resetFilter: function(){
-    if(window.pslayers.length){
+    if($this.state.layers.length){
       var layer = this.getCurrentLayer();
       //TODO
     }
@@ -1364,9 +1411,14 @@ const AppStage = React.createClass({
               var image = new Image();
               image.onload = function(){
                 $this.createNewFile(image.width,image.height,'#none',function(){
-                  drawOpt.draggable = false;
+                  drawOpt.draggable = true;
                   drawOpt.zindex = 1;
-                  $this.appDrawImage(image,drawOpt);
+                  $this.appDrawImage(image,drawOpt,function(){
+                    console.log($this.state.layers);
+                    $this.setState({currentlayer:$this.state.layers[0]},function(){
+                      console.log('aaa');
+                    });
+                  });
                 });
                 if(typeof callback === 'function') callback();
               }
@@ -1383,9 +1435,12 @@ const AppStage = React.createClass({
             background:'#none'
           }
           $this.createNewFile(opt,function(){
-            drawOpt.draggable = false;
+            drawOpt.draggable = true;
             drawOpt.zindex = 1;
-            $this.appDrawImage(image,drawOpt);
+            $this.appDrawImage(image,drawOpt,function(){
+              $this.setState({currentlayer:$this.state.layers[0]},function(){
+              });
+            });
           });
           if(typeof callback === 'function') callback();
         }
