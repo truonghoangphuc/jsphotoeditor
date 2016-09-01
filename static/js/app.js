@@ -50,7 +50,7 @@ var jcrop_api;
 
 const DrawAppBox = React.createClass({
   getInitialState: function() {
-    return {message:null,panels:null,layerItems:null,selectedLayers:[]};
+    return {message:null,panels:null,layerItems:null,selectedLayers:[],currentLayer:{opacity:function(){return 1;}}};
   },
   componentDidMount: function() {
     var panels = [],$this=this;
@@ -71,7 +71,6 @@ const DrawAppBox = React.createClass({
     this.drawToStage(this.refs.appstage.state.layers);
   },
   componentWillUnmount: function(){
-    console.log('AppBox componentWillUnmount');
   },
   handleAppSubmit: function(comment) {
     
@@ -116,13 +115,13 @@ const DrawAppBox = React.createClass({
     this.refs.modal.open();
   },
   confirmFileModal: function() {
-    if(this.props.fileSelects.length<=0){
+    if(this.props.fileCurrentSelect.length<=0){
         bootbox.alert('You need select at least 1 photo');
         return;
     }
-    var $this = this;
-    for(var i=0,len=this.props.fileSelects.length;i<len;i++){
-      this.handleLoadPhoto(this.props.fileSelects[i],function(){
+    var $this = this,arr = this.props.fileCurrentSelect;
+    for(var i=0,len=arr.length;i<len;i++){
+      this.handleLoadPhoto(this.props.fileCurrentSelect[i],function(){
         $this.refs.editupload.updateData($this.props.fileEdited);
         $this.openPhotoModal();
       });     
@@ -138,13 +137,17 @@ const DrawAppBox = React.createClass({
     this.refs.modalphoto.open();
   },
   closePhotoModal: function() {
-    var cans = $('#editArea').find('canvas');
+    var cans = this.props.fileEdited;//$('#editArea').find('canvas.new');
     for(var i=0,len=cans.length;i<len;i++){
-      this.props.fileImported.push(cans[i]);
-      var drawOpt = {};
-      drawOpt.draggable = true;
-      drawOpt.zindex = i+1;
-      this.refs.appstage.appDrawImage(cans[i],drawOpt);
+      if(cans[i].status==undefined){
+        var c = cans[i].canvas;
+        this.props.fileImported.push(c);
+        var drawOpt = {};
+        drawOpt.draggable = true;
+        drawOpt.zindex = i+1;
+        this.refs.appstage.appDrawImage(c,drawOpt);
+        cans[i].status = "added";
+      }
     }
     this.refs.modalphoto.close();
   },
@@ -173,6 +176,7 @@ const DrawAppBox = React.createClass({
         canvas = null,
         item = {src:file,img:null,canvas:null};
     reader.addEventListener("load", function () {
+      $this.props.fileCurrentSelect.shift();
       if(isPhone){
         var imgT = new Image();
         var canvast = document.createElement('canvas');
@@ -265,11 +269,10 @@ const DrawAppBox = React.createClass({
             canvas.height = image.height;
             context.drawImage(this,0,0,image.width,image.height,0,0,canvas.width,canvas.height);
           }
-          //a.attr('data-name',file.name).append(image).append('<label><i class="fa fa-arrows-alt"></i><i class="fa fa-crop"></i></label>');
           item.img = image;
           item.canvas = canvas;
           $this.props.fileEdited.push(item);
-          if($this.props.fileEdited.length==$this.props.fileSelects.length){
+          if($this.props.fileCurrentSelect.length==0){
             if(typeof callback==='function'){
               callback();
             }
@@ -327,6 +330,7 @@ const DrawAppBox = React.createClass({
         o = l.children;
     o[0].innerText = i.value;
     this.refs.appstage.setOpacity(i.value/100);
+    this.setState({currentLayer:this.refs.appstage.state.currentlayer});
   },
   handleTransform: function(e){
     this.refs.appstage.appTransform(e);
@@ -346,6 +350,8 @@ const DrawAppBox = React.createClass({
       $this.drawToStage($this.refs.appstage.state.layers);
       var obj = $this.refs.appstage.state.currentlayer;
       showWrap(obj);
+      $this.setState({currentLayer:layer});
+      $this.refs.panelfilter.handleSwitchObject();
     }); 
   },
   drawToStage: function(layers){
@@ -378,7 +384,7 @@ const DrawAppBox = React.createClass({
     var modal = null;
     modal = (
       <AppModal ref="modal" confirm="OK" cancel="Cancel" onCancel={this.handleFileModalCancel} onConfirm={this.confirmFileModal} id="fileModal" title="ReactPhotoEdito - Add Photos">
-        <AppUpload fileSelects={this.props.fileSelects}></AppUpload>
+        <AppUpload fileCurrentSelect={this.props.fileCurrentSelect}></AppUpload>
       </AppModal>
     );
     var modalEditPhoto = null;
@@ -433,15 +439,15 @@ const DrawAppBox = React.createClass({
     );
     var panelManualFilter = null;
     panelManualFilter = (
-      <AppPanel ref="panelmanual" className="manual-filters" id="panelManualEffect" title="Filters">
-        <AppFilterPanel appstage={this.refs.appstage} items={AppFilterObject}></AppFilterPanel>
+      <AppPanel ref="panelmanual" className="manual-filters" title="Filters">
+        <AppFilterPanel ref="panelfilter" appstage={this.refs.appstage} items={AppFilterObject} id="panelManualEffect"></AppFilterPanel>
       </AppPanel>
     );
     var panelLayer = null;
     panelLayer = (
       <AppPanel ref="panellayer" title="Layers" className="layers-panel" id="panelLayers">
         <div className="form-group">
-          <label>Opacity: <strong>100</strong>%</label><input type="range" max="100" min="0" step="1" defaultValue="100" onChange={this.handleOpacity}/>
+          <label>Opacity: <strong>{this.state.currentLayer.opacity()*100}</strong>%</label><input type="range" max="100" min="0" step="1" value={this.state.currentLayer.opacity()*100} onChange={this.handleOpacity}/>
         </div>
         <div className="form-group group-layers">
           {$this.state.layerItems}
@@ -763,6 +769,15 @@ const AppFilterPanel = React.createClass({
     if(this.props.appstage==null)return;
     this.props.appstage.resetFilter();
   },
+  handleSwitchObject: function(e){
+    var $this = this;
+    var opt = ReactDOM.findDOMNode(this).querySelector('#select_'+$this.props.id);
+    opt.value = '';
+    var s = document.querySelector('.effect-option.show');
+    if(s){
+      s.classList.remove('show');
+    }
+  },
   render: function() {
     var $this = this;
     var items = [],
@@ -858,13 +873,14 @@ const AppPanel = React.createClass({
   render: function() {
     var $this = this;
     var classes = (this.state.isOpening)?'show ':'';
+    var close = (this.state.isOpening)? 'x':'-';
     classes+=this.props.className;
     var styleInline = {right:this.state.right,top:this.state.top,zIndex:this.state.zindex};
     return (
       <div ref="root" className={classes + ' panel panel-success window-panel'} id={this.props.id} style={styleInline}>
         <div className="panel-heading" onDragEnd={this.moveend} draggable="true">
           <h3 className="panel-title">{this.props.title}</h3>
-          <button type="button" className="close" onClick={this.toggle}>&times;</button>
+          <button type="button" className="close" onClick={this.toggle}>{close}</button>
         </div>
         <div className="panel-body">
           {this.props.children}
@@ -951,22 +967,21 @@ const AppUpload = React.createClass({
   getInitialState: function(){
     return {
       isHovering: false,
-      isFull:false,
       isHasFile:false
     };
   },
   parseFile: function (file){
-    this.props.fileSelects.push(file);
-    if(this.props.fileSelects.length){
+    this.props.fileCurrentSelect.push(file);
+    if(this.props.fileCurrentSelect.length){
       this.setState({
         isHasFile:true
       });
     }
-    if(this.props.fileSelects.length>=8){
-      this.setState({
-        isFull:true
-      });
-    }
+    // if(this.props.fileCurrentSelect.length>=8){
+    //   this.setState({
+    //     isFull:true
+    //   });
+    // }
   },
   fileSelectHandler: function(e){
     this.fileDragHover(e);
@@ -980,7 +995,7 @@ const AppUpload = React.createClass({
       max_upload = e.target.parentElement.getAttribute('data-max-upload');
     }
     for (var i = 0, f; f = files[i]; i++) {
-      if(this.props.fileSelects.length>=max_upload)return;
+      if(this.props.fileCurrentSelect.length>=max_upload)return;
       if(f.size>max_size){
           bootbox.alert('Dung lượng hình là '+parseFloat(f.size/(1024*1024)).toFixed(2) +'MB. Dung lượng tối đa cho phép là '+max_size/(1024*1024)+'MB');
       }else{
@@ -995,6 +1010,7 @@ const AppUpload = React.createClass({
     e.type == "dragover" ? this.setState({ isHovering: true }) : this.setState({ isHovering: false });
   },
   componentDidMount: function(){
+    console.log()
   },
   componentWillUnmount: function(){
 
@@ -1012,9 +1028,9 @@ const AppUpload = React.createClass({
     }
   },
   render: function(){
-    var classes = this.state.isFull ? "full" : "";
+    //var classes = this.state.isFull ? "full" : "";
     return(
-      <div className={classes + ' upload-area'}>
+      <div className="upload-area">
         {this.dragControl()}
         <BootstrapButton className="btn-fab btn-danger"><i className="material-icons">file_upload</i><input id="fileInput" multiple="multiple" accept="image/*" type="file" name="" value="" placeholder="" data-max-upload="8" data-max-size="8388608" onChange={this.fileSelectHandler}/></BootstrapButton>
       </div>
@@ -1238,6 +1254,7 @@ const AppStage = React.createClass({
       var layer = this.getCurrentLayer();
       layer.setOpacity(v);
       KineticStage.draw();
+      console.log(layer);
     }
   },
   setZIndex: function(l,v){
@@ -1261,7 +1278,9 @@ const AppStage = React.createClass({
         height: layer.height()
       }
       layer.cache(config);
-      layer.filters([Kinetic.Filters[filter]]);
+      var arr = layer.filters()!==undefined?layer.filters():[];
+      arr.push(Kinetic.Filters[filter]);
+      layer.filters(arr);
       KineticStage.draw();
       if(typeof callback === 'function') callback();
     }
@@ -1279,46 +1298,83 @@ const AppStage = React.createClass({
     if(typeof src=='string'){
       cs=src;
     }else{
-      if(src.nodeName.toLowerCase()=='canvas'){
-        cs = src.toDataURL();
+      if(src.nodeName==undefined){
+        cs = null;
+      }else {
+        if(src.nodeName.toLowerCase()=='canvas'){
+          cs = src.toDataURL();
+        }
+        if(src.nodeName.toLowerCase()=='img'){
+          cs = src.src;
+        }
       }
-      if(src.nodeName.toLowerCase()=='img'){
-        cs = src.src;
-      }
+        
     }
     var img = new Image();
     var imgR,
         $this = this;
-    img.onload = function() {
-      imgR=drawImage(this, 0, 0, img.width, img.height,opt.zindex, opt.draggable);
-      //console.log(imgR.parent);
+    var x = (opt.x!==null)? opt.x:0,
+        y = (opt.y!==null)? opt.y:0;
+    if(cs==null){
+      img = src.attrs.image;
+      imgR=drawImage(img, x, y, img.width, img.height,opt.zindex, opt.draggable);
       if(imgR.parent && imgR.parent.nodeType=='Layer'){
         var layer = {}, arr = $this.state.layers;
         layer = imgR.parent;
         layer.key = arr.length;
+        layer.opacity = 100;
         arr.push(layer);
         $this.setState({layers:arr});
         $this.props.onDraw($this.state.layers);
         if(typeof callback =='function') callback();
       }
+    }else{
+      img.onload = function() {
+        imgR=drawImage(this, x, y, img.width, img.height,opt.zindex, opt.draggable);
+        if(imgR.parent && imgR.parent.nodeType=='Layer'){
+          var layer = {}, arr = $this.state.layers;
+          layer = imgR.parent;
+          layer.key = arr.length;
+          arr.push(layer);
+          $this.setState({layers:arr});
+          $this.props.onDraw($this.state.layers);
+          if(typeof callback =='function') callback();
+        }
+      }
+      img.src = cs;
     }
-    img.src = cs;
   },
   saveApplyFilter: function(){
     if(this.state.layers.length){
       hideWrap();
       var $this = this;
       var layer = this.getCurrentLayer();
-      layer.toImage({
-        callback: function(img){
-          $this.appRemoveLayer(layer);
-          layer.remove();
-          var drawOpt={};
-          drawOpt.draggable = true;
-          drawOpt.zindex = 1;
-          $this.appDrawImage(img,drawOpt);
+      if(layer.children[0].nodeType=='Group'){
+        var g = layer.children[0],
+            pos = g.attrs;
+        if(pos.x==undefined)pos.x=0;
+        if(pos.y==undefined)pos.y=0;
+        var arrChildren = g.children;
+        for(var i = 0, len = arrChildren.length; i < len; i++) {
+            var children = arrChildren[i];
+            if(children.getName() == 'image') {
+              var canvas = document.createElement('canvas');
+              canvas.width = children.attrs.width;
+              canvas.height = children.attrs.height;
+              var ctx = canvas.getContext('2d');
+              var src = layer.getCanvas()._canvas;
+              ctx.drawImage(src,pos.x,pos.y,children.attrs.width,children.attrs.height,0,0,children.attrs.width,children.attrs.height);
+              $this.appRemoveLayer(layer);
+              layer.remove();
+              var opt = {};
+              opt.x = pos.x;
+              opt.y = pos.y;
+              opt.draggable = true;
+              opt.zindex = layer.index;
+              $this.appDrawImage(canvas,opt);
+            }
         }
-      });
+      }
     }
   },
   cancelFilter: function(){
@@ -1525,6 +1581,6 @@ const AppStage = React.createClass({
   }
 });
 ReactDOM.render(
-  <DrawAppBox fileImported={[]} fileEdited={[]} fileSelects={[]} mobileMode={$('html').hasClass('isMobile')? true:false}/>,
+  <DrawAppBox fileImported={[]} fileEdited={[]} fileSelects={[]} fileCurrentSelect={[]} mobileMode={$('html').hasClass('isMobile')? true:false}/>,
   document.getElementById('main')
 );
