@@ -1202,6 +1202,16 @@ const AppStage = React.createClass({
   getCurrentLayer: function(){
     return this.state.currentlayer;
   },
+  getCurrentImg: function(layer){
+    if(layer.children[0].nodeType=='Group'){
+      var g = layer.children[0];
+      var arrChildren = g.children;
+      for(var i = 0, len = arrChildren.length; i < len; i++) {
+        var children = arrChildren[i];
+        if(children.getName() == 'image') return children;
+      }
+    }
+  },
   setCurrentLayer: function(l,callback){
     this.setState({currentlayer:l},function(){
       if(typeof callback=='function')callback();
@@ -1271,11 +1281,12 @@ const AppStage = React.createClass({
     if(this.state.layers.length&&filter!==''){
       hideWrap();
       var layer = this.getCurrentLayer();
+      var img = this.getCurrentImg(layer);
       var config = {
         x:0,
         y:0,
-        width: layer.width(),
-        height: layer.height()
+        width: img.attrs.width,
+        height: img.attrs.height
       }
       layer.cache(config);
       var arr = layer.filters()!==undefined?layer.filters():[];
@@ -1358,6 +1369,20 @@ const AppStage = React.createClass({
         for(var i = 0, len = arrChildren.length; i < len; i++) {
             var children = arrChildren[i];
             if(children.getName() == 'image') {
+              //compare image and stage/layer
+              var lw = layer.width(),
+                  lh = layer.height(),
+                  iw = children.attrs.width,
+                  ih = children.attrs.height;
+              if(iw>lw||ih>lh){
+
+                KineticStage.setSize({
+                  width:iw,
+                  height:ih
+                });
+                KineticStage.draw();
+              }
+
               var canvas = document.createElement('canvas');
               canvas.width = children.attrs.width;
               canvas.height = children.attrs.height;
@@ -1371,7 +1396,10 @@ const AppStage = React.createClass({
               opt.y = pos.y;
               opt.draggable = true;
               opt.zindex = layer.index;
-              $this.appDrawImage(canvas,opt);
+              $this.appDrawImage(canvas,opt,function(){
+                if(iw>lw)KineticStage.width(lw);
+                if(ih>lh)KineticStage.height(lh);
+              });
             }
         }
       }
