@@ -81,7 +81,6 @@ const DrawAppBox = React.createClass({
   componentWillUnmount: function(){
   },
   handleClick: function(method,e){
-    console.log(method);
     var ref = method.substring(0,3);
     if(ref=='app'){
       this.refs.appstage[method](e);
@@ -161,7 +160,7 @@ const DrawAppBox = React.createClass({
         var drawOpt = {};
         drawOpt.draggable = true;
         drawOpt.zindex = i+1;
-        this.refs.appstage.appDrawImage(c,drawOpt);
+        this.refs.appstage.appDrawImage(c,cans[i].name,drawOpt);
         cans[i].status = "added";
       }
     }
@@ -251,27 +250,28 @@ const DrawAppBox = React.createClass({
                 }
                 ctx.drawImage(imgT,0,0);
                 ctx.restore();
+                var image = new Image();
+                image.title = file.name;
+                image.onload = function(){
+                    var can = document.createElement('canvas');
+                    if(can!==null){
+                        var context = can.getContext("2d");
+                        can.width = image.width;
+                        can.height = image.height;
+                        context.drawImage(this,0,0,image.width,image.height,0,0,can.width,can.height);
+                    }
+                    item.img = image;
+                    item.canvas = canvas;
+                    item.name = file.name;
+                    $this.props.fileEdited.push(item);
+                    if($this.props.fileEdited.length==$this.props.fileSelects.length){
+                      if(typeof callback==='function'){
+                        callback();
+                      }
+                    }
+                }
+                image.src = canvast.toDataURL();
             });
-            var image = new Image();
-            image.title = file.name;
-            image.onload = function(){
-                var can = document.createElement('canvas');
-                if(can!==null){
-                    var context = can.getContext("2d");
-                    can.width = image.width;
-                    can.height = image.height;
-                    context.drawImage(this,0,0,image.width,image.height,0,0,can.width,can.height);
-                }
-                item.img = image;
-                item.canvas = canvas;
-                $this.props.fileEdited.push(item);
-                if($this.props.fileEdited.length==$this.props.fileSelects.length){
-                  if(typeof callback==='function'){
-                    callback();
-                  }
-                }
-            }
-            image.src = canvast.toDataURL();
         }
         imgT.src = this.result;
       }else{
@@ -287,6 +287,7 @@ const DrawAppBox = React.createClass({
           }
           item.img = image;
           item.canvas = canvas;
+          item.name = file.name;
           $this.props.fileEdited.push(item);
           if($this.props.fileCurrentSelect.length==0){
             if(typeof callback==='function'){
@@ -357,16 +358,26 @@ const DrawAppBox = React.createClass({
       $this.drawToStage($this.refs.appstage.state.layers);
       var obj = $this.refs.appstage.state.currentlayer;
       showWrap(obj);
-      $this.setState({currentLayer:layer});
-      $this.refs.panelfilter.handleSwitchObject();
+      $this.setState({currentLayer:layer},function(){
+        $this.refs.panelfilter.handleSwitchObject();
+      });
     }); 
   },
   drawToStage: function(layers){
     var $this = this;
     var layerItems = [];
     if(layers!==null&&layers!==undefined){
+      layers.sort(function (a, b) {
+        if (a.index > b.index) {
+          return 1;
+        }
+        if (a.index < b.index) {
+          return -1;
+        }
+        return 0;
+      });
       layers.forEach(function(l,i){
-        layerItems.push(<AppLayer key={i} id={i} data-ref={l} selected={$this.state.selectedLayers[i]} title={'Layer ' + (i+1)} handleClick={$this.selectLayer}></AppLayer>);
+        layerItems.push(<AppLayer key={i} id={i} data-ref={l} selected={$this.state.selectedLayers[i]} title={l.layername} handleClick={$this.selectLayer}></AppLayer>);
       });
       layerItems.reverse();
       this.setState({layerItems:layerItems},function(){
@@ -385,6 +396,23 @@ const DrawAppBox = React.createClass({
         });
       });
     }
+  },
+  updateLayers: function(){
+    var $this = this,
+        items = this.state.layerItems;
+    items.sort(function (a, b) {
+      if (a.props['data-ref'].index > b.props['data-ref'].index) {
+        return 1;
+      }
+      if (a.index < b.index) {
+        return -1;
+      }
+      return 0;
+    });
+    items.reverse();
+    this.setState({layerItems:items},function(){
+      //console.log('done');
+    });
   },
   render: function() {
     var $this = this;
@@ -475,7 +503,7 @@ const DrawAppBox = React.createClass({
     return (
       <div className="main-app">
         <AppToolbar ref="apptoolbar" buttons={AppToolButtons}/>
-        <AppStage ref="appstage" mobileMode={this.props.mobileMode} url="/api/photo" onMessage={this.showMessage} onDraw={this.drawToStage}/>
+        <AppStage ref="appstage" mobileMode={this.props.mobileMode} url="/api/photo" onMessage={this.showMessage} onDraw={this.drawToStage} onUpdate={this.updateLayers}/>
         <BootstrapInput type="file" className="file-dialog" id="fileDialog" onChange={this.handleOpenFile}></BootstrapInput>
         {modal}
         {modalEditPhoto}
@@ -818,6 +846,9 @@ const AppPanel = React.createClass({
   componentWillUnmount: function() {
     
   },
+  componentWillReceiveProps: function(){
+
+  },
   setStage:function(stage){
     this.setState({appstage:stage});
   },
@@ -1125,7 +1156,13 @@ const AppLayer = React.createClass({
     return {opacity:1,zindex:1,name:''};
   },
   componentDidMount: function(){
-    this.setName(this.props.title);
+    this.setState({name:this.props.title});
+  },
+  componentWillMount: function(){
+    
+  },
+  componentWillReceiveProps: function(nextProps){
+    this.setState({name:nextProps.title});
   },
   setOpacity: function(v){
     this.setState({opacity:v});
@@ -1204,28 +1241,64 @@ const AppStage = React.createClass({
     var layer = this.getCurrentLayer();
     if(layer!==null){
       layer.moveDown();
-      this.props.onDraw(this.state.layers);
+      var arr = this.state.layers;
+      for(var obj in arr) {
+        if(obj.key == layer.key) {
+          obj = layer;
+          break;
+        }
+      }
+      this.setState({layers:arr},function(){
+        this.props.onUpdate();
+      });
     }
   },
   appToFront: function(e){
     var layer = this.getCurrentLayer();
     if(layer!==null){
       layer.moveUp();
-      this.props.onDraw(this.state.layers);
+      var arr = this.state.layers;
+      for(var obj in arr) {
+        if(obj.key == layer.key) {
+          obj = layer;
+          break;
+        }
+      }
+      this.setState({layers:arr},function(){
+        this.props.onUpdate();
+      });
     }
   },
   appToTop: function(e){
     var layer = this.getCurrentLayer();
     if(layer!==null){
       layer.moveToTop();
-      this.props.onDraw(this.state.layers);
+      var arr = this.state.layers;
+      for(var obj in arr) {
+        if(obj.key == layer.key) {
+          obj = layer;
+          break;
+        }
+      }
+      this.setState({layers:arr},function(){
+        this.props.onUpdate();
+      });
     }
   },
   appToBottom: function(e){
     var layer = this.getCurrentLayer();
     if(layer!==null){
       layer.moveToBottom();
-      this.props.onDraw(this.state.layers);
+      var arr = this.state.layers;
+      for(var obj in arr) {
+        if(obj.key == layer.key) {
+          obj = layer;
+          break;
+        }
+      }
+      this.setState({layers:arr},function(){
+        this.props.onUpdate();
+      });
     }
   },
   appZoomIn: function(e){
@@ -1311,7 +1384,7 @@ const AppStage = React.createClass({
       KineticStage.draw();
     }
   },
-  appDrawImage: function(src,opt,callback){
+  appDrawImage: function(src,name,opt,callback){
     //add layer when draw image
     var cs;
     if(typeof src=='string'){
@@ -1341,7 +1414,7 @@ const AppStage = React.createClass({
         var layer = {}, arr = $this.state.layers;
         layer = imgR.parent;
         layer.key = arr.length;
-        layer.opacity = 100;
+        layer.layername = name;
         arr.push(layer);
         $this.setState({layers:arr});
         $this.props.onDraw($this.state.layers);
@@ -1354,6 +1427,7 @@ const AppStage = React.createClass({
           var layer = {}, arr = $this.state.layers;
           layer = imgR.parent;
           layer.key = arr.length;
+          layer.layername = name;
           arr.push(layer);
           $this.setState({layers:arr});
           $this.props.onDraw($this.state.layers);
@@ -1402,6 +1476,8 @@ const AppStage = React.createClass({
               var ctx = canvas.getContext('2d');
               var src = layer.getCanvas()._canvas;
               ctx.drawImage(src,pos.x,pos.y,children.attrs.width,children.attrs.height,0,0,children.attrs.width,children.attrs.height);
+              
+              var name = layer.layername;
               $this.appRemoveLayer(layer);
               layer.remove();
               var opt = {};
@@ -1409,7 +1485,7 @@ const AppStage = React.createClass({
               opt.y = pos.y;
               opt.draggable = true;
               opt.zindex = layer.index;
-              $this.appDrawImage(canvas,opt,function(){
+              $this.appDrawImage(canvas,name,opt,function(){
                 if(iw>lw)KineticStage.width(lw);
                 if(ih>lh)KineticStage.height(lh);
               });
@@ -1516,7 +1592,7 @@ const AppStage = React.createClass({
                 $this.createNewFile(image.width,image.height,'#none',function(){
                   drawOpt.draggable = true;
                   drawOpt.zindex = 1;
-                  $this.appDrawImage(image,drawOpt,function(){
+                  $this.appDrawImage(image,file.name,drawOpt,function(){
                     console.log($this.state.layers);
                     $this.setState({currentlayer:$this.state.layers[0]},function(){
                       console.log('aaa');
@@ -1540,7 +1616,7 @@ const AppStage = React.createClass({
           $this.createNewFile(opt,function(){
             drawOpt.draggable = true;
             drawOpt.zindex = 1;
-            $this.appDrawImage(image,drawOpt,function(){
+            $this.appDrawImage(image,file.name,drawOpt,function(){
               $this.setState({currentlayer:$this.state.layers[0]},function(){
               });
             });
