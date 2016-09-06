@@ -57,7 +57,7 @@ var jcrop_api;
 
 const DrawAppBox = React.createClass({
   getInitialState: function() {
-    return {message:null,panels:null,layerItems:null,selectedLayers:[],currentLayer:{opacity:function(){return 1;}}};
+    return {message:null,panels:null,blendable:false,layerItems:null,selectedLayers:[],currentLayer:{opacity:function(){return 1;}}};
   },
   componentDidMount: function() {
     var panels = [],$this=this;
@@ -343,6 +343,17 @@ const DrawAppBox = React.createClass({
     this.refs.appstage.setOpacity(i.value/100);
     this.setState({currentLayer:this.refs.appstage.state.currentlayer});
   },
+  handleBlend: function(e){
+    var $this=this,
+        i = e.target,
+        arr = [];
+    this.state.layerItems.forEach(function(l,i){
+      if(l.props.selected)arr.push(l);
+    });
+    this.refs.appstage.blend(i.value,arr,function(){
+      $this.setState({currentLayer:$this.refs.appstage.state.currentlayer});
+    });
+  },
   selectLayer: function(e,selected,layer){
     var $this = this;
     var arr = this.state.selectedLayers,
@@ -354,6 +365,11 @@ const DrawAppBox = React.createClass({
     }
     arr[k]=selected;
     this.setState({selectedLayers:arr});
+    if(this.state.selectedLayers.length>2){
+      this.setState({blendable:true});
+    }else{
+      this.setState({blendable:false});
+    }
     this.refs.appstage.setCurrentLayer(layer,function(){
       $this.drawToStage($this.refs.appstage.state.layers);
       var obj = $this.refs.appstage.state.currentlayer;
@@ -363,7 +379,7 @@ const DrawAppBox = React.createClass({
       });
     }); 
   },
-  drawToStage: function(layers){
+  drawToStage: function(layers,callback){
     var $this = this;
     var layerItems = [];
     if(layers!==null&&layers!==undefined){
@@ -381,6 +397,7 @@ const DrawAppBox = React.createClass({
       });
       layerItems.reverse();
       this.setState({layerItems:layerItems},function(){
+        if(typeof callback==='function') callback();
         var sortable = Sortable.create(document.querySelector('.group-layers'),{
           handle: '.drag-handle',
           animation: 150,
@@ -411,7 +428,7 @@ const DrawAppBox = React.createClass({
     });
     items.reverse();
     this.setState({layerItems:items},function(){
-      //console.log('done');
+      console.log('done');
     });
   },
   render: function() {
@@ -488,8 +505,8 @@ const DrawAppBox = React.createClass({
       <AppPanel ref="panellayer" title="Layers" className="layers-panel" id="panelLayers">
         <div className="form-group row">
           <label>Blend: </label>
-          <select className="form-control">
-          {blenditems}
+          <select className="form-control" disabled={!this.state.blendable} onChange={this.handleBlend}>
+            {blenditems}
           </select>
         </div>
         <div className="form-group">
@@ -1230,12 +1247,29 @@ const AppStage = React.createClass({
       if(typeof callback=='function')callback();
     });
   },
-  appRemoveLayer: function(layer){
-    var arr = this.state.layers;
-    arr = arr.filter(function(l) {
-      return l.key !== layer.key;
-    });
-    this.setState({layers:arr});
+  appRemoveLayer: function(layer,callback){
+    var $t = this;
+    var arr = [];
+    if(layer.length==1){
+      arr = this.state.layers.filter(function(l) {
+        return l.key !== layer.key;
+      });
+      this.setState({layers:arr},function(){
+        if(typeof callback=='function')callback();
+      });
+    }else{
+      var a = this.state.layers;
+      for(var i=0,l=layer.length;i<l;i++){
+        for(var x=a.length-1;x>=0;x--){
+          if(layer[i].key==a[x].key){
+            a.splice(x,1);
+          }
+        }
+      }
+      this.setState({layers:a},function(){
+        if(typeof callback=='function')callback();
+      });
+    }
   },
   appToBack: function(e){
     var layer = this.getCurrentLayer();
@@ -1343,6 +1377,83 @@ const AppStage = React.createClass({
       KineticStage.draw();
     }
   },
+  blend: function(mode,layers,callback){
+    var $this = this,
+        canvas = document.createElement('canvas'),
+        ctx = canvas.getContext('2d'),
+        ow = KineticStage.width(),
+        oh = KineticStage.height(),
+        lr = [];
+      
+    for(var i=0,len=layers.length;i<len;i++){
+      var layer = layers[i].props['data-ref'];
+      if(layer.children[0].nodeType=='Group'){
+        var g = layer.children[0],
+            pos = g.attrs;
+        if(pos.x==undefined)pos.x=0;
+        if(pos.y==undefined)pos.y=0;
+        var arrChildren = g.children;
+        for(var x = 0, len2 = arrChildren.length; x < len2; x++) {
+          var children = arrChildren[x];
+          if(children.getName() == 'image') {
+            var lw = layer.width(),
+                lh = layer.height(),
+                iw = children.attrs.width,
+                ih = children.attrs.height,
+                sw = lw,
+                sh = lh;
+            if(iw>lw){
+              sw = iw;
+            }
+            if(ih>lh){
+              sh = ih;
+            }
+            KineticStage.setSize({
+              width:sw,
+              height:sh
+            });
+            KineticStage.draw();
+
+            if(i==0){
+              canvas.width = children.attrs.width;
+              canvas.height = children.attrs.height;
+              ctx.save();        
+            }
+            
+            var src = layer.getCanvas()._canvas;
+            ctx.drawImage(src,pos.x,pos.y,children.attrs.width,children.attrs.height,0,0,children.attrs.width,children.attrs.height);
+            
+            if(i==0)ctx.globalCompositeOperation = mode;
+
+            var name = mode+'---'+layer.layername;
+            lr.push(layer);
+            layer.remove();  
+
+            if(i==len-1){
+              var opt = {};
+              opt.x = pos.x;
+              opt.y = pos.y;
+              opt.draggable = true;
+              opt.zindex = layer.index;
+              $this.appDrawImage(canvas,name,opt,function(){
+                KineticStage.width(ow);
+                KineticStage.height(oh);
+                $this.appRemoveLayer(lr,function(){
+                  $this.props.onDraw($this.state.layers,function(){
+                    $this.props.onUpdate();
+                  });
+                  // setTimeout(function(){
+                  //   $this.props.onUpdate();
+                  // },500);
+                  if(typeof callback=='function')callback();
+                });
+              });
+            }
+          }
+        }
+      }
+    }
+  },
   setZIndex: function(l,v){
     l.setZIndex(v);
     KineticStage.draw();
@@ -1413,12 +1524,13 @@ const AppStage = React.createClass({
       if(imgR.parent && imgR.parent.nodeType=='Layer'){
         var layer = {}, arr = $this.state.layers;
         layer = imgR.parent;
-        layer.key = arr.length;
+        layer.key = name;
         layer.layername = name;
         arr.push(layer);
-        $this.setState({layers:arr});
-        $this.props.onDraw($this.state.layers);
-        if(typeof callback =='function') callback();
+        $this.setState({layers:arr},function(){
+          $this.props.onDraw($this.state.layers);
+          if(typeof callback =='function') callback();
+        });
       }
     }else{
       img.onload = function() {
@@ -1426,12 +1538,13 @@ const AppStage = React.createClass({
         if(imgR.parent && imgR.parent.nodeType=='Layer'){
           var layer = {}, arr = $this.state.layers;
           layer = imgR.parent;
-          layer.key = arr.length;
+          layer.key = name;
           layer.layername = name;
           arr.push(layer);
-          $this.setState({layers:arr});
-          $this.props.onDraw($this.state.layers);
-          if(typeof callback =='function') callback();
+          $this.setState({layers:arr},function(){
+            $this.props.onDraw($this.state.layers);
+            if(typeof callback =='function') callback();
+          });
         }
       }
       img.src = cs;
