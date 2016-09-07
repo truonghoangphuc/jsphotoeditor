@@ -372,8 +372,8 @@ const DrawAppBox = React.createClass({
     }
     this.refs.appstage.setCurrentLayer(layer,function(){
       $this.drawToStage($this.refs.appstage.state.layers);
-      var obj = $this.refs.appstage.state.currentlayer;
-      showWrap(obj);
+      // var obj = $this.refs.appstage.state.currentlayer;
+      // showWrap(obj);
       $this.setState({currentLayer:layer},function(){
         $this.refs.panelfilter.handleSwitchObject();
       });
@@ -1250,7 +1250,8 @@ const AppStage = React.createClass({
   appRemoveLayer: function(layer,callback){
     var $t = this;
     var arr = [];
-    if(layer.length==1){
+    console.log(layer.length);
+    if(layer.length==undefined){
       arr = this.state.layers.filter(function(l) {
         return l.key !== layer.key;
       });
@@ -1435,16 +1436,14 @@ const AppStage = React.createClass({
               opt.y = pos.y;
               opt.draggable = true;
               opt.zindex = layer.index;
-              $this.appDrawImage(canvas,name,opt,function(){
+              $this.appDrawImage(canvas,name,opt,function(l){
                 KineticStage.width(ow);
                 KineticStage.height(oh);
                 $this.appRemoveLayer(lr,function(){
+                  $this.setCurrentLayer(l);
                   $this.props.onDraw($this.state.layers,function(){
                     $this.props.onUpdate();
                   });
-                  // setTimeout(function(){
-                  //   $this.props.onUpdate();
-                  // },500);
                   if(typeof callback=='function')callback();
                 });
               });
@@ -1529,7 +1528,7 @@ const AppStage = React.createClass({
         arr.push(layer);
         $this.setState({layers:arr},function(){
           $this.props.onDraw($this.state.layers);
-          if(typeof callback =='function') callback();
+          if(typeof callback =='function') callback(layer);
         });
       }
     }else{
@@ -1543,7 +1542,7 @@ const AppStage = React.createClass({
           arr.push(layer);
           $this.setState({layers:arr},function(){
             $this.props.onDraw($this.state.layers);
-            if(typeof callback =='function') callback();
+            if(typeof callback =='function') callback(layer);
           });
         }
       }
